@@ -73,10 +73,25 @@ curl -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/cron/dea
 curl -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/cron/reminder
 ```
 
+## V2 WhatsApp (in progress)
+
+Fase 1 (channel toggle + UI link wa.me) dan Fase 2 (webhook + welcome/consent flow) sudah masuk. Lihat [plans/v2-whatsapp.md](plans/v2-whatsapp.md).
+
+### Setup WAHA managed (Sumopod / serupa)
+
+1. Buat session di dashboard WAHA → tab **Webhooks** → **Add Webhook**:
+   - URL: `https://<vercel-url>/api/wa/webhook`
+   - Events: pilih `message` (Phase 4 nanti tambah `message.any` untuk media)
+   - Retries: default OK (15 attempts, 2s delay, exponential)
+   - HMAC Key: generate random ≥32 char (`openssl rand -hex 32`), simpan — sama dengan `WAHA_WEBHOOK_HMAC_SECRET` di Vercel
+2. Set env di Vercel project settings (lihat [.env.example](.env.example) bagian V2 WhatsApp).
+3. Jalankan migration [supabase/migrations/0005_whatsapp.sql](supabase/migrations/0005_whatsapp.sql) di Supabase SQL Editor.
+4. Set `WHATSAPP_ENABLED=true` di Vercel → opsi channel WhatsApp muncul di UI create-batch. Untuk kill switch, set `false` → opsi hilang + webhook return 503.
+
+Trade-off: tanpa sidecar debouncer, peserta yang kirim pesan beruntun akan dapat reply per pesan. Welcome message minta peserta tulis lengkap dalam satu pesan.
+
 ## Roadmap pasca-MVP
 
-MVP 6 fase sudah selesai. Item ditunda yang potensial untuk v2:
-- WhatsApp channel adapter (arsitektur sudah siap)
 - Auto-share link ke peserta (tanpa copy-paste manual)
 - Dashboard agregat lintas batch
 - Custom rubrik per kelas

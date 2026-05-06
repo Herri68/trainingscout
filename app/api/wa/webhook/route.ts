@@ -1,22 +1,28 @@
-// POST /api/wa/webhook — terima batch debounced messages dari sidecar VPS.
-// Body: { jid, messages: [{ type: 'text', text: string, timestamp: number }, ...] }
-// Header: x-waha-signature: <hex sha256 hmac of raw body using WAHA_WEBHOOK_HMAC_SECRET>
+// POST /api/wa/webhook — terima webhook event dari WAHA (managed).
+// WAHA payload native: { event, session, payload: { from, fromMe, type, body, timestamp, ... } }
+// Header auth: `X-Webhook-Hmac` = sha512 hex dari raw body, key = WAHA_WEBHOOK_HMAC_SECRET
+// (set di dashboard WAHA → HMAC Key).
 
 import { NextResponse } from "next/server";
-import { verifyHmac } from "@/lib/wa/hmac";
+import { verifyWahaHmac } from "@/lib/wa/hmac";
 import { handleWelcomeFlow } from "@/lib/wa/welcome";
 
 export const runtime = "nodejs";
 
-type InboundMessage = {
-  type: string;
-  text?: string;
+type WahaPayload = {
+  id?: string;
+  from?: string;
+  fromMe?: boolean;
+  type?: string;
+  body?: string;
   timestamp?: number;
+  hasMedia?: boolean;
 };
 
-type Body = {
-  jid: string;
-  messages: InboundMessage[];
+type WahaEvent = {
+  event?: string;
+  session?: string;
+  payload?: WahaPayload;
 };
 
 export async function POST(req: Request): Promise<Response> {
@@ -30,37 +36,38 @@ export async function POST(req: Request): Promise<Response> {
   }
 
   const raw = await req.text();
-  const sig = req.headers.get("x-waha-signature");
-  if (!verifyHmac(raw, sig, secret)) {
+  const sig = req.headers.get("x-webhook-hmac");
+  if (!verifyWahaHmac(raw, sig, secret)) {
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
   }
 
-  let body: Body;
+  let evt: WahaEvent;
   try {
-    body = JSON.parse(raw) as Body;
+    evt = JSON.parse(raw) as WahaEvent;
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
 
-  if (!body?.jid || !Array.isArray(body.messages)) {
-    return NextResponse.json({ error: "missing fields" }, { status: 400 });
+  // Phase 2 hanya tangani event `message` inbound. session.status di-akui tapi diabaikan.
+  if (evt.event !== "message") {
+    return NextResponse.json({ ok: true, ignored: evt.event ?? "unknown" });
   }
 
-  // Phase 2: gabung hanya pesan text. Media handling masuk Phase 4.
-  const joinedText = body.messages
-    .filter((m) => m.type === "text" && typeof m.text === "string")
-    .map((m) => m.text!.trim())
-    .filter(Boolean)
-    .join("\n");
+  const p = evt.payload ?? {};
+  if (!p.from || p.fromMe === true) {
+    return NextResponse.json({ ok: true, skipped: "non-inbound" });
+  }
 
-  if (!joinedText) {
-    // No text content; Phase 2 tidak handle media — Phase 4 akan tolak halus.
-    return NextResponse.json({ ok: true, skipped: "no_text" });
+  // Phase 2 text-only. Media handling masuk Phase 4.
+  const isText = p.type === "chat" || p.type === "text";
+  const text = typeof p.body === "string" ? p.body.trim() : "";
+  if (!isText || !text) {
+    return NextResponse.json({ ok: true, skipped: "non-text" });
   }
 
   try {
-    const result = await handleWelcomeFlow(body.jid, joinedText);
-    // Phase 3 akan invoke agent di sini saat result.readyForAgent === true.
+    const result = await handleWelcomeFlow(p.from, text);
+    // Phase 3 akan invoke agent saat result.readyForAgent === true.
     return NextResponse.json({
       ok: true,
       readyForAgent: result.readyForAgent,
