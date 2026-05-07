@@ -28,7 +28,20 @@ export function extractToken(text: string): string | null {
 async function sendBubbles(jid: string, bubbles: string[]): Promise<void> {
   for (let i = 0; i < bubbles.length; i++) {
     if (i > 0) await new Promise((r) => setTimeout(r, 600));
-    await sendText(jid, bubbles[i]);
+    try {
+      await sendText(jid, bubbles[i]);
+    } catch (err) {
+      console.error(`[wa/welcome] sendBubbles failed at ${i} for ${jid}:`, err);
+      return;
+    }
+  }
+}
+
+async function safeSend(jid: string, text: string): Promise<void> {
+  try {
+    await sendText(jid, text);
+  } catch (err) {
+    console.error(`[wa/welcome] safeSend failed for ${jid}:`, err);
   }
 }
 
@@ -73,7 +86,7 @@ export async function handleWelcomeFlow(
   // 2. Belum claim → coba extract token.
   const token = extractToken(joinedText);
   if (!token) {
-    await sendText(jid, NO_TOKEN);
+    await safeSend(jid, NO_TOKEN);
     return { readyForAgent: false, participantId: null };
   }
 
@@ -84,12 +97,12 @@ export async function handleWelcomeFlow(
     .maybeSingle<ParticipantRow>();
 
   if (!byToken) {
-    await sendText(jid, NO_TOKEN);
+    await safeSend(jid, NO_TOKEN);
     return { readyForAgent: false, participantId: null };
   }
 
   if (byToken.phone_jid && byToken.phone_jid !== jid) {
-    await sendText(jid, TOKEN_TAKEN);
+    await safeSend(jid, TOKEN_TAKEN);
     return { readyForAgent: false, participantId: null };
   }
 
@@ -100,12 +113,12 @@ export async function handleWelcomeFlow(
     .single<BatchRow>();
 
   if (!batch || batch.channel !== "whatsapp") {
-    await sendText(jid, NO_TOKEN);
+    await safeSend(jid, NO_TOKEN);
     return { readyForAgent: false, participantId: null };
   }
 
   if (batch.status === "closed") {
-    await sendText(jid, BATCH_CLOSED);
+    await safeSend(jid, BATCH_CLOSED);
     return { readyForAgent: false, participantId: null };
   }
 
@@ -127,7 +140,7 @@ async function handleClaimedJid(
   const supabase = supabaseAdmin();
 
   if (p.session_locked_at || p.wa_status === "completed") {
-    await sendText(jid, SESSION_LOCKED);
+    await safeSend(jid, SESSION_LOCKED);
     return { readyForAgent: false, participantId: p.id };
   }
 
@@ -138,20 +151,20 @@ async function handleClaimedJid(
     .single<BatchRow>();
 
   if (batch?.status === "closed") {
-    await sendText(jid, BATCH_CLOSED);
+    await safeSend(jid, BATCH_CLOSED);
     return { readyForAgent: false, participantId: p.id };
   }
 
   if (p.wa_status === "pending_consent") {
     if (DECLINE_REGEX.test(joinedText)) {
-      await sendText(jid, CONSENT_DECLINED);
+      await safeSend(jid, CONSENT_DECLINED);
       return { readyForAgent: false, participantId: p.id };
     }
     await supabase
       .from("participants")
       .update({ wa_status: "in_progress", started_at: new Date().toISOString() })
       .eq("id", p.id);
-    await sendText(jid, CONSENT_GRANTED_ACK);
+    await safeSend(jid, CONSENT_GRANTED_ACK);
     // Phase 2 stops here; Phase 3 will invoke agent on the next inbound turn.
     return { readyForAgent: false, participantId: p.id };
   }
@@ -161,6 +174,6 @@ async function handleClaimedJid(
   }
 
   // wa_status null/pending tanpa claim — tidak seharusnya terjadi (defensive).
-  await sendText(jid, NO_TOKEN);
+  await safeSend(jid, NO_TOKEN);
   return { readyForAgent: false, participantId: p.id };
 }

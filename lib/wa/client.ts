@@ -16,14 +16,28 @@ function headers(): Record<string, string> {
 }
 
 export async function sendText(jid: string, text: string): Promise<void> {
-  const res = await fetch(`${baseUrl()}/api/sendText`, {
-    method: "POST",
-    headers: headers(),
-    body: JSON.stringify({ session: SESSION, chatId: jid, text }),
-  });
+  // NOWEB engine kadang surface JID sebagai @lid. sendText umumnya minta @c.us;
+  // sebagian setup juga toleran. Coba @c.us kalau JID berupa @lid.
+  const chatId = jid.endsWith("@lid") ? jid.replace("@lid", "@c.us") : jid;
+  const url = `${baseUrl()}/api/sendText`;
+  const body = JSON.stringify({ session: SESSION, chatId, text });
+  console.log(`[waha] sendText -> ${chatId} (session=${SESSION}, len=${text.length})`);
+  let res: Response;
+  try {
+    res = await fetch(url, {
+      method: "POST",
+      headers: headers(),
+      body,
+      signal: AbortSignal.timeout(8000),
+    });
+  } catch (err) {
+    console.error(`[waha] sendText fetch error to ${chatId}:`, err);
+    throw err;
+  }
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`WAHA sendText failed: ${res.status} ${body}`);
+    const respBody = await res.text().catch(() => "");
+    console.error(`[waha] sendText ${res.status} for ${chatId}: ${respBody}`);
+    throw new Error(`WAHA sendText failed: ${res.status} ${respBody}`);
   }
 }
 
