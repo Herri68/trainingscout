@@ -2,6 +2,7 @@ import Link from "next/link";
 import { supabaseServer } from "@/lib/supabase/server";
 import { isWhatsappEnabled } from "@/lib/wa/config";
 import { createBatchAction } from "./actions";
+import { isParticipantCompleted } from "./participant-status";
 
 const PARTICIPANT_LIMIT = 500;
 
@@ -36,19 +37,13 @@ export default async function DashboardPage({
   const { data: participantsRaw } = await participantsQuery;
   const participants = participantsRaw ?? [];
 
-  function isCompleted(p: (typeof participants)[number]): boolean {
-    const batch = Array.isArray(p.batches) ? p.batches[0] : p.batches;
-    const isWa = batch?.channel === "whatsapp";
-    return isWa ? p.wa_status === "completed" : p.status === "completed";
-  }
-
   return (
     <div className="space-y-8">
       <section>
         <h1 className="text-2xl font-semibold">Peserta kamu</h1>
         <p className="mt-1 text-sm text-neutral-600">
-          Daftar semua peserta lintas batch. Klik baris peserta untuk melihat profil
-          (segera hadir).
+          Daftar semua peserta lintas batch. Klik baris peserta untuk melihat
+          profil (segera hadir).
         </p>
       </section>
 
@@ -99,7 +94,7 @@ export default async function DashboardPage({
           <ul className="divide-y divide-neutral-200">
             {participants.map((p) => {
               const batch = Array.isArray(p.batches) ? p.batches[0] : p.batches;
-              const completed = isCompleted(p);
+              const completed = isParticipantCompleted(p);
               return (
                 <li
                   key={p.id}
@@ -208,7 +203,9 @@ export default async function DashboardPage({
                   <div>
                     <div className="font-medium">{b.name}</div>
                     {b.course_name && (
-                      <div className="text-sm text-neutral-600">{b.course_name}</div>
+                      <div className="text-sm text-neutral-600">
+                        {b.course_name}
+                      </div>
                     )}
                   </div>
                   <div className="flex items-center gap-2">
@@ -226,7 +223,9 @@ export default async function DashboardPage({
             ))}
           </ul>
         ) : (
-          <p className="text-sm text-neutral-500">Belum ada batch. Buat satu di atas.</p>
+          <p className="text-sm text-neutral-500">
+            Belum ada batch. Buat satu di atas.
+          </p>
         )}
       </section>
     </div>
