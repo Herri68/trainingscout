@@ -233,5 +233,23 @@ export async function runTurn(opts: RunOptions): Promise<RunResult> {
     // else loop again so model can continue with next question
   }
 
+  // Safety net: kalau model selesai turn tanpa memanggil end_session padahal
+  // 6 dimensi sudah ter-mark, auto-close. Kadang Haiku skip tool call dan cuma
+  // kirim teks penutup — UI/lock harus tetap reflect kondisi sebenarnya.
+  if (!sessionEnded) {
+    const { data: marks } = await admin
+      .from("dimension_marks")
+      .select("dimension")
+      .eq("participant_id", participant.id);
+    const marked = new Set((marks ?? []).map((m) => m.dimension));
+    if (DIMENSION_IDS.every((d) => marked.has(d))) {
+      await admin
+        .from("participants")
+        .update({ status: "completed", completed_at: new Date().toISOString() })
+        .eq("id", participant.id);
+      opts.onSessionEnded();
+    }
+  }
+
   return { ok: true };
 }
