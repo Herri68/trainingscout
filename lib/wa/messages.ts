@@ -25,3 +25,12 @@ export const CONSENT_DECLINED =
 
 export const CONSENT_GRANTED_ACK =
   "Siap, kita mulai sebentar lagi 🙂";
+
+export const REJECT_MEDIA =
+  "Sesi ini hanya text atau voice note ya 🙂 Tolong tulis atau kirim voice (≤2 menit) untuk dijawab.";
+
+export const VOICE_TOO_LONG =
+  "Voice-nya terlalu panjang. Tolong dipotong jadi pesan-pesan lebih singkat (≤2 menit) ya 🙂";
+
+export const VOICE_FAILED =
+  "Maaf, voice-nya kurang jelas. Tolong kirim ulang atau ketik ya 🙂";
