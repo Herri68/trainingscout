@@ -42,3 +42,20 @@ export function reminder24h(name: string, batchName: string): string {
 export function reminder2h(name: string, batchName: string): string {
   return `Heads up ${name}, deadline sesi "${batchName}" kurang dari 2 jam lagi ⏰ Kalau bisa, selesaikan sekarang. Kirim pesan apa saja untuk lanjut.`;
 }
+
+export function broadcastInvite(
+  name: string,
+  batchName: string,
+  courseName: string | null,
+  token: string,
+): string {
+  const courseSuffix = courseName ? ` (${courseName})` : "";
+  return `Halo ${name}! 👋
+
+Trainer mengundang kamu ikut sesi pra-kelas singkat untuk "${batchName}"${courseSuffix}. Sesi ~15 menit ngobrol santai dengan asisten kami.
+
+Untuk mulai, balas pesan ini dengan:
+Halo TrainingScout ${token}
+
+Sampai ketemu! 🙂`;
+}

@@ -11,6 +11,8 @@ import {
 import CopyLinkButton from "./copy-link-button";
 import CSVUpload from "./csv-upload";
 import GenerateBriefButton from "./generate-brief-button";
+import BroadcastSection from "./broadcast-section";
+import { normalizePhoneToJid } from "@/lib/wa/phone";
 
 const STATUS_LABEL: Record<string, string> = {
   not_started: "Belum mulai",
@@ -63,7 +65,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
   const { data: participants } = await supabase
     .from("participants")
-    .select("id, name, email, phone, token, status, wa_status")
+    .select("id, name, email, phone, token, status, wa_status, wa_broadcast_sent_at")
     .eq("batch_id", id)
     .order("created_at", { ascending: true });
 
@@ -88,6 +90,25 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
     const s = await getSessionStatus();
     waSessionDown = !s || (s.status !== "WORKING" && s.status !== "STARTING");
   }
+
+  // Target broadcast: pending + belum di-broadcast + phone valid Indonesia.
+  const broadcastTargets = isWaBatch
+    ? (participants ?? []).filter(
+        (p) =>
+          (p.wa_status ?? "pending") === "pending" &&
+          !p.wa_broadcast_sent_at &&
+          normalizePhoneToJid(p.phone) !== null,
+      ).length
+    : 0;
+  const broadcastDisabledReason = !isWaBatch
+    ? null
+    : !isWhatsappEnabled()
+      ? "WHATSAPP_ENABLED tidak aktif."
+      : waSessionDown
+        ? "WhatsApp service sedang gangguan."
+        : batch.status === "closed"
+          ? "Batch sudah closed."
+          : null;
 
   return (
     <div className="space-y-8">
@@ -174,6 +195,14 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
           </div>
         </div>
       </section>
+
+      {isWaBatch && (
+        <BroadcastSection
+          batchId={batch.id}
+          targetCount={broadcastTargets}
+          disabledReason={broadcastDisabledReason}
+        />
+      )}
 
       <section className="rounded-lg border border-neutral-200 bg-white p-6">
         <div className="flex flex-wrap items-center justify-between gap-3">
