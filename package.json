@@ -9,7 +9,8 @@
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepare": "husky"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.40.0",
@@ -24,7 +25,10 @@
     "@types/react": "^19",
     "@types/react-dom": "^19",
     "autoprefixer": "^10.4.20",
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.2",
     "postcss": "^8.4.49",
+    "prettier": "^3.8.3",
     "tailwindcss": "^3.4.17",
     "typescript": "^5.7.2",
     "vitest": "^2.1.8"
