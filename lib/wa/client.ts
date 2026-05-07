@@ -16,9 +16,9 @@ function headers(): Record<string, string> {
 }
 
 export async function sendText(jid: string, text: string): Promise<void> {
-  // NOWEB engine kadang surface JID sebagai @lid. sendText umumnya minta @c.us;
-  // sebagian setup juga toleran. Coba @c.us kalau JID berupa @lid.
-  const chatId = jid.endsWith("@lid") ? jid.replace("@lid", "@c.us") : jid;
+  // Kirim ke JID apa adanya. NOWEB engine native handle @lid; mengubah suffix
+  // ke @c.us malah menghasilkan JID invalid (nomor lid bukan nomor HP).
+  const chatId = jid;
   const url = `${baseUrl()}/api/sendText`;
   const body = JSON.stringify({ session: SESSION, chatId, text });
   console.log(`[waha] sendText -> ${chatId} (session=${SESSION}, len=${text.length})`);
