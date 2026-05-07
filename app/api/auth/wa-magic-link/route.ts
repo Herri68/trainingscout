@@ -71,24 +71,35 @@ export async function POST(req: Request): Promise<Response> {
 
   if (rateLimited(ip)) {
     console.log(`[auth/wa-magic-link] rate_limited ip=${ip}`);
-    return NextResponse.json({ ok: false, reason: "rate_limited" }, { status: 429 });
+    return NextResponse.json(
+      { ok: false, reason: "rate_limited" },
+      { status: 429 },
+    );
   }
 
   let body: { email?: string };
   try {
     body = (await req.json()) as { email?: string };
   } catch {
-    return NextResponse.json({ ok: false, reason: "invalid_body" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, reason: "invalid_body" },
+      { status: 400 },
+    );
   }
 
   const email = (body.email ?? "").trim();
   if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    return NextResponse.json({ ok: false, reason: "invalid_email" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, reason: "invalid_email" },
+      { status: 400 },
+    );
   }
 
   const trainerEmail = process.env.TRAINER_EMAIL?.trim().toLowerCase();
   if (!trainerEmail || email.toLowerCase() !== trainerEmail) {
-    console.log(`[auth/wa-magic-link] not_registered email=${maskEmail(email)}`);
+    console.log(
+      `[auth/wa-magic-link] not_registered email=${maskEmail(email)}`,
+    );
     return NextResponse.json({ ok: false, reason: "not_registered" });
   }
 
@@ -103,7 +114,9 @@ export async function POST(req: Request): Promise<Response> {
       ? "wa_unavailable"
       : null;
 
-  // WA path
+  // WA path: kirim OTP 6-digit, bukan link.
+  // Alasan: WhatsApp link-preview crawler memprefetch URL magic link, otomatis konsumsi token,
+  // sehingga klik manual dari user selalu kena `otp_expired`. OTP 6-digit menghindari masalah ini.
   if (waReady) {
     try {
       const { data, error } = await supabase.auth.admin.generateLink({
@@ -111,16 +124,23 @@ export async function POST(req: Request): Promise<Response> {
         email,
         options: { redirectTo },
       });
-      if (error || !data.properties?.action_link) {
-        console.error(`[auth/wa-magic-link] generate_link_failed: ${error?.message}`);
-        return NextResponse.json({ ok: false, reason: "generate_link_failed" }, { status: 500 });
+      const otp = data?.properties?.email_otp;
+      if (error || !otp) {
+        console.error(
+          `[auth/wa-magic-link] generate_link_failed: ${error?.message}`,
+        );
+        return NextResponse.json(
+          { ok: false, reason: "generate_link_failed" },
+          { status: 500 },
+        );
       }
-      const link = data.properties.action_link;
       const jid = process.env.TRAINER_WA_JID!;
-      const text = `Halo! Klik link ini untuk masuk ke TrainingScout:\n\n${link}\n\nLink berlaku ~1 jam, sekali pakai.`;
+      const text = `Kode masuk TrainingScout:\n\n*${otp}*\n\nMasukkan di halaman login. Berlaku ~1 jam, sekali pakai.`;
       try {
         await sendText(jid, text);
-        console.log(`[auth/wa-magic-link] sent_via=wa email=${maskEmail(email)} jid=${maskJid(jid)}`);
+        console.log(
+          `[auth/wa-magic-link] sent_via=wa email=${maskEmail(email)} jid=${maskJid(jid)}`,
+        );
         return NextResponse.json({
           ok: true,
           channel: "wa",
@@ -128,16 +148,22 @@ export async function POST(req: Request): Promise<Response> {
         });
       } catch (err) {
         console.error(`[auth/wa-magic-link] wa_send_failed:`, err);
-        // jatuh ke email fallback di bawah
         return await fallbackToEmail(email, redirectTo, "wa_send_failed");
       }
     } catch (err) {
       console.error(`[auth/wa-magic-link] generateLink threw:`, err);
-      return NextResponse.json({ ok: false, reason: "generate_link_failed" }, { status: 500 });
+      return NextResponse.json(
+        { ok: false, reason: "generate_link_failed" },
+        { status: 500 },
+      );
     }
   }
 
-  return await fallbackToEmail(email, redirectTo, fallbackReason ?? "wa_unavailable");
+  return await fallbackToEmail(
+    email,
+    redirectTo,
+    fallbackReason ?? "wa_unavailable",
+  );
 }
 
 async function fallbackToEmail(
@@ -151,8 +177,13 @@ async function fallbackToEmail(
     options: { emailRedirectTo: redirectTo },
   });
   if (error) {
-    console.error(`[auth/wa-magic-link] email_send_failed reason=${reason}: ${error.message}`);
-    return NextResponse.json({ ok: false, reason: "email_send_failed" }, { status: 500 });
+    console.error(
+      `[auth/wa-magic-link] email_send_failed reason=${reason}: ${error.message}`,
+    );
+    return NextResponse.json(
+      { ok: false, reason: "email_send_failed" },
+      { status: 500 },
+    );
   }
   console.log(
     `[auth/wa-magic-link] sent_via=email reason=${reason} email=${maskEmail(email)}`,
