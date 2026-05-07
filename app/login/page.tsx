@@ -3,41 +3,109 @@
 import { useState } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
+type SuccessState = {
+  channel: "wa" | "email";
+  maskedDestination: string;
+  fallback: boolean;
+};
+
 export default function LoginPage() {
   const [email, setEmail] = useState("");
-  const [sent, setSent] = useState(false);
+  const [success, setSuccess] = useState<SuccessState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] = useState<"wa" | "email" | null>(null);
 
-  async function onSubmit(e: React.FormEvent) {
+  async function submitWa(e: React.FormEvent) {
     e.preventDefault();
-    setLoading(true);
+    setLoading("wa");
     setError(null);
+    setSuccess(null);
+    try {
+      const res = await fetch("/api/auth/wa-magic-link", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email }),
+      });
+      const data = (await res.json()) as {
+        ok: boolean;
+        reason?: string;
+        channel?: "wa" | "email";
+        maskedDestination?: string;
+      };
+      if (res.status === 429) {
+        setError("Terlalu banyak percobaan. Coba lagi 30 detik.");
+        return;
+      }
+      if (!data.ok) {
+        if (data.reason === "not_registered") {
+          setError("Email tidak terdaftar.");
+        } else if (data.reason === "invalid_email") {
+          setError("Format email tidak valid.");
+        } else {
+          setError("Gagal mengirim magic link. Coba lagi.");
+        }
+        return;
+      }
+      setSuccess({
+        channel: data.channel ?? "wa",
+        maskedDestination: data.maskedDestination ?? "",
+        fallback: data.channel === "email",
+      });
+    } catch {
+      setError("Network error. Coba lagi.");
+    } finally {
+      setLoading(null);
+    }
+  }
+
+  async function submitEmail() {
+    setLoading("email");
+    setError(null);
+    setSuccess(null);
     const supabase = supabaseBrowser();
     const { error } = await supabase.auth.signInWithOtp({
       email,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
+      options: { emailRedirectTo: `${window.location.origin}/auth/callback` },
     });
-    setLoading(false);
+    setLoading(null);
     if (error) setError(error.message);
-    else setSent(true);
+    else
+      setSuccess({
+        channel: "email",
+        maskedDestination: maskEmail(email),
+        fallback: false,
+      });
   }
 
   return (
     <main className="mx-auto max-w-md px-6 py-20">
       <h1 className="text-2xl font-semibold">Masuk sebagai trainer</h1>
       <p className="mt-2 text-sm text-neutral-600">
-        Kami akan kirim magic link ke emailmu. Klik link itu untuk masuk.
+        Kami akan kirim magic link ke WhatsApp atau email kamu.
       </p>
 
-      {sent ? (
-        <div className="mt-6 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
-          Magic link sudah dikirim ke <b>{email}</b>. Cek inbox (dan spam folder).
+      {success ? (
+        <div className="mt-6 space-y-2 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
+          {success.channel === "wa" ? (
+            <p>
+              Magic link sudah dikirim ke WhatsApp <b>{success.maskedDestination}</b>.
+            </p>
+          ) : (
+            <>
+              {success.fallback && (
+                <p className="text-amber-800">
+                  ⚠️ WhatsApp sedang gangguan, link dikirim ke email sebagai fallback.
+                </p>
+              )}
+              <p>
+                Magic link sudah dikirim ke email <b>{success.maskedDestination}</b>.
+              </p>
+            </>
+          )}
+          <p className="text-xs text-green-800/80">Link berlaku ~1 jam, sekali pakai.</p>
         </div>
       ) : (
-        <form onSubmit={onSubmit} className="mt-6 space-y-4">
+        <form onSubmit={submitWa} className="mt-6 space-y-4">
           <input
             type="email"
             required
@@ -48,14 +116,28 @@ export default function LoginPage() {
           />
           <button
             type="submit"
-            disabled={loading}
-            className="w-full rounded-md bg-neutral-900 px-4 py-2 text-white hover:bg-neutral-800 disabled:opacity-50"
+            disabled={loading !== null}
+            className="w-full rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
           >
-            {loading ? "Mengirim..." : "Kirim magic link"}
+            {loading === "wa" ? "Mengirim ke WhatsApp..." : "Kirim magic link via WhatsApp"}
+          </button>
+          <button
+            type="button"
+            onClick={submitEmail}
+            disabled={loading !== null || !email}
+            className="w-full rounded-md border border-neutral-300 px-4 py-2 text-sm text-neutral-700 hover:bg-neutral-50 disabled:opacity-50"
+          >
+            {loading === "email" ? "Mengirim ke email..." : "Kirim via email"}
           </button>
           {error && <p className="text-sm text-red-600">{error}</p>}
         </form>
       )}
     </main>
   );
+}
+
+function maskEmail(email: string): string {
+  const [user, domain] = email.split("@");
+  if (!user || !domain) return "***";
+  return `${user[0]}***@${domain}`;
 }

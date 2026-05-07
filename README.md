@@ -83,6 +83,10 @@ Fase 1–5 sudah masuk. Lihat [plans/v2-whatsapp.md](plans/v2-whatsapp.md).
 - **Phase 4** ✅ voice transcribe (Groq Whisper) + reject non-audio media
 - **Phase 5** ✅ reminder cron WA (24h + 2h) + dashboard status WA + banner WAHA gangguan
 
+### Trainer login via WhatsApp (internal-only)
+
+Single-trainer setup. Set `TRAINER_EMAIL` + `TRAINER_WA_JID` di env, lalu di `/login` tombol "Kirim magic link via WhatsApp" akan generate Supabase magic link dan kirim via WAHA. Auto-fallback ke email kalau WAHA tidak available. Tombol "Kirim via email" tetap ada sebagai opsi manual. Lihat [plans/wa-magic-link-login.md](plans/wa-magic-link-login.md).
+
 ### Setup WAHA managed (Sumopod / serupa)
 
 1. Buat session di dashboard WAHA → tab **Webhooks** → **Add Webhook**:
