@@ -57,6 +57,37 @@ export async function stopTyping(jid: string): Promise<void> {
   }).catch(() => {});
 }
 
+/**
+ * Kirim balasan agent ke WA dengan auto-split per paragraf + typing indicator.
+ * Split by \n\n, max 4 chunk. Untuk tiap chunk: startTyping → sleep proporsional → sendText → sleep 400ms.
+ */
+export async function sendChunked(jid: string, fullText: string): Promise<void> {
+  const trimmed = fullText.trim();
+  if (!trimmed) return;
+  const parts = trimmed
+    .split(/\n{2,}/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0)
+    .slice(0, 4);
+  for (let i = 0; i < parts.length; i++) {
+    const chunk = parts[i];
+    await startTyping(jid);
+    const typingMs = Math.min(50 * chunk.length, 1500);
+    await new Promise((r) => setTimeout(r, typingMs));
+    try {
+      await sendText(jid, chunk);
+    } catch (err) {
+      console.error(`[waha] sendChunked failed at ${i} for ${jid}:`, err);
+      await stopTyping(jid).catch(() => {});
+      return;
+    }
+    if (i < parts.length - 1) {
+      await new Promise((r) => setTimeout(r, 400));
+    }
+  }
+  await stopTyping(jid).catch(() => {});
+}
+
 export async function getSessionStatus(): Promise<{ status: string } | null> {
   try {
     const res = await fetch(`${baseUrl()}/api/sessions/${SESSION}`, {

@@ -1,6 +1,10 @@
 import { DIMENSIONS } from "./dimensions";
 
-export function systemPrompt(participantName: string, courseName: string | null): string {
+export function systemPrompt(
+  participantName: string,
+  courseName: string | null,
+  channel: "web" | "whatsapp" = "web",
+): string {
   const courseLine = courseName
     ? `Peserta akan mengikuti kelas: ${courseName}.`
     : `Peserta akan mengikuti kelas pelatihan AI coding.`;
@@ -56,5 +60,15 @@ KAPAN PANGGIL TOOL end_session
 JANGAN
 - Jangan menyebut nama tool ke peserta (peserta tidak tahu ada "tool", mereka cuma ngobrol).
 - Jangan mengulang welcome di turn berikutnya.
-- Jangan menyebut "dimensi 1, dimensi 2" ke peserta — pakai bahasa natural.`;
+- Jangan menyebut "dimensi 1, dimensi 2" ke peserta — pakai bahasa natural.${
+    channel === "whatsapp"
+      ? `
+
+CHANNEL: WHATSAPP
+- Kamu sedang chat di WhatsApp. Pesan akan dibaca di HP, bukan browser.
+- Balas pendek: 1–3 kalimat per giliran. Pisahkan paragraf dengan baris kosong (\\n\\n) supaya bisa di-split jadi bubble terpisah.
+- HINDARI heading markdown (#, ##), bullet list (- atau *), tabel, atau code block. Cukup kalimat ngobrol biasa.
+- Emoji ringan boleh, jangan berlebihan.`
+      : ""
+  }`;
 }

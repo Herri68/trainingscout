@@ -6,8 +6,13 @@
 import { NextResponse } from "next/server";
 import { verifyWahaHmac } from "@/lib/wa/hmac";
 import { handleWelcomeFlow } from "@/lib/wa/welcome";
+import { runTurn } from "@/lib/agent/run";
+import { sendChunked } from "@/lib/wa/client";
+import { supabaseAdmin } from "@/lib/supabase/admin";
+import { SESSION_LOCKED } from "@/lib/wa/messages";
 
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type WahaPayload = {
   id?: string;
@@ -70,7 +75,51 @@ export async function POST(req: Request): Promise<Response> {
 
   try {
     const result = await handleWelcomeFlow(p.from, text);
-    // Phase 3 akan invoke agent saat result.readyForAgent === true.
+
+    if (result.readyForAgent && result.token && result.participantId) {
+      let collected = "";
+      let sessionEnded = false;
+      const run = await runTurn({
+        token: result.token,
+        userMessage: text,
+        channel: "whatsapp",
+        onTextDelta: (t) => {
+          collected += t;
+        },
+        onSessionEnded: () => {
+          sessionEnded = true;
+        },
+      });
+
+      if (!run.ok) {
+        console.error(`[wa/webhook] runTurn failed: ${run.error}`);
+        // Kalau sesi sudah selesai sebelumnya, balas template lock.
+        if (run.error === "sesi sudah selesai" || run.error === "batch sudah ditutup") {
+          await sendChunked(p.from, SESSION_LOCKED).catch(() => {});
+        }
+        return NextResponse.json({ ok: true, agentError: run.error });
+      }
+
+      const reply = collected.trim();
+      if (reply) {
+        await sendChunked(p.from, reply).catch((e) =>
+          console.error(`[wa/webhook] sendChunked error:`, e),
+        );
+      }
+
+      if (sessionEnded) {
+        await supabaseAdmin()
+          .from("participants")
+          .update({
+            wa_status: "completed",
+            session_locked_at: new Date().toISOString(),
+          })
+          .eq("id", result.participantId);
+      }
+
+      return NextResponse.json({ ok: true, agent: "ran", sessionEnded });
+    }
+
     return NextResponse.json({
       ok: true,
       readyForAgent: result.readyForAgent,

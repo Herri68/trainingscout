@@ -25,6 +25,7 @@ export type RunOptions = {
   userMessage?: string;
   onTextDelta: (text: string) => void;
   onSessionEnded: () => void;
+  channel?: "web" | "whatsapp";
 };
 
 export type RunResult = {
@@ -103,7 +104,7 @@ export async function runTurn(opts: RunOptions): Promise<RunResult> {
   const system: Anthropic.TextBlockParam[] = [
     {
       type: "text",
-      text: systemPrompt(participant.name, batch?.course_name ?? null),
+      text: systemPrompt(participant.name, batch?.course_name ?? null, opts.channel ?? "web"),
       cache_control: { type: "ephemeral" },
     },
   ];

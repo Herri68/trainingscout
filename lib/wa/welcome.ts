@@ -69,7 +69,7 @@ type BatchRow = {
 export async function handleWelcomeFlow(
   jid: string,
   joinedText: string,
-): Promise<{ readyForAgent: boolean; participantId: string | null }> {
+): Promise<{ readyForAgent: boolean; participantId: string | null; token: string | null }> {
   const supabase = supabaseAdmin();
 
   // 1. Cek apakah JID sudah claim peserta.
@@ -87,7 +87,7 @@ export async function handleWelcomeFlow(
   const token = extractToken(joinedText);
   if (!token) {
     await safeSend(jid, NO_TOKEN);
-    return { readyForAgent: false, participantId: null };
+    return { readyForAgent: false, participantId: null, token: null };
   }
 
   const { data: byToken } = await supabase
@@ -98,12 +98,12 @@ export async function handleWelcomeFlow(
 
   if (!byToken) {
     await safeSend(jid, NO_TOKEN);
-    return { readyForAgent: false, participantId: null };
+    return { readyForAgent: false, participantId: null, token: null };
   }
 
   if (byToken.phone_jid && byToken.phone_jid !== jid) {
     await safeSend(jid, TOKEN_TAKEN);
-    return { readyForAgent: false, participantId: null };
+    return { readyForAgent: false, participantId: null, token: null };
   }
 
   const { data: batch } = await supabase
@@ -114,12 +114,12 @@ export async function handleWelcomeFlow(
 
   if (!batch || batch.channel !== "whatsapp") {
     await safeSend(jid, NO_TOKEN);
-    return { readyForAgent: false, participantId: null };
+    return { readyForAgent: false, participantId: null, token: null };
   }
 
   if (batch.status === "closed") {
     await safeSend(jid, BATCH_CLOSED);
-    return { readyForAgent: false, participantId: null };
+    return { readyForAgent: false, participantId: null, token: null };
   }
 
   // Claim: bind JID, set pending_consent, kirim welcome.
@@ -129,19 +129,19 @@ export async function handleWelcomeFlow(
     .eq("id", byToken.id);
 
   await sendBubbles(jid, [welcomeBubble1(byToken.name), welcomeBubble2(batch.name)]);
-  return { readyForAgent: false, participantId: byToken.id };
+  return { readyForAgent: false, participantId: byToken.id, token: byToken.token };
 }
 
 async function handleClaimedJid(
   p: ParticipantRow,
   joinedText: string,
   jid: string,
-): Promise<{ readyForAgent: boolean; participantId: string | null }> {
+): Promise<{ readyForAgent: boolean; participantId: string | null; token: string | null }> {
   const supabase = supabaseAdmin();
 
   if (p.session_locked_at || p.wa_status === "completed") {
     await safeSend(jid, SESSION_LOCKED);
-    return { readyForAgent: false, participantId: p.id };
+    return { readyForAgent: false, participantId: p.id, token: p.token };
   }
 
   const { data: batch } = await supabase
@@ -152,13 +152,13 @@ async function handleClaimedJid(
 
   if (batch?.status === "closed") {
     await safeSend(jid, BATCH_CLOSED);
-    return { readyForAgent: false, participantId: p.id };
+    return { readyForAgent: false, participantId: p.id, token: p.token };
   }
 
   if (p.wa_status === "pending_consent") {
     if (DECLINE_REGEX.test(joinedText)) {
       await safeSend(jid, CONSENT_DECLINED);
-      return { readyForAgent: false, participantId: p.id };
+      return { readyForAgent: false, participantId: p.id, token: p.token };
     }
     await supabase
       .from("participants")
@@ -166,14 +166,14 @@ async function handleClaimedJid(
       .eq("id", p.id);
     await safeSend(jid, CONSENT_GRANTED_ACK);
     // Phase 2 stops here; Phase 3 will invoke agent on the next inbound turn.
-    return { readyForAgent: false, participantId: p.id };
+    return { readyForAgent: false, participantId: p.id, token: p.token };
   }
 
   if (p.wa_status === "in_progress") {
-    return { readyForAgent: true, participantId: p.id };
+    return { readyForAgent: true, participantId: p.id, token: p.token };
   }
 
   // wa_status null/pending tanpa claim — tidak seharusnya terjadi (defensive).
   await safeSend(jid, NO_TOKEN);
-  return { readyForAgent: false, participantId: p.id };
+  return { readyForAgent: false, participantId: p.id, token: p.token };
 }
