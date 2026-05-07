@@ -123,7 +123,8 @@ export default function LoginPage() {
         <form onSubmit={verifyOtp} className="mt-6 space-y-4">
           <div className="rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
             <p>
-              Kode OTP dikirim ke WhatsApp <b>{success.maskedDestination}</b>.
+              Kode 6-digit dikirim ke WhatsApp{" "}
+              <b>{success.maskedDestination}</b>.
             </p>
             <p className="mt-1 text-xs text-green-800/80">
               Berlaku ~1 jam, sekali pakai.
@@ -134,17 +135,17 @@ export default function LoginPage() {
             inputMode="numeric"
             pattern="[0-9]*"
             autoComplete="one-time-code"
-            maxLength={10}
+            maxLength={6}
             required
             value={otp}
             onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
-            placeholder="kode dari WA"
+            placeholder="123456"
             className="w-full rounded-md border border-neutral-300 px-3 py-2 text-center text-2xl tracking-[0.5em] outline-none focus:border-neutral-900"
             autoFocus
           />
           <button
             type="submit"
-            disabled={loading !== null || otp.length < 6}
+            disabled={loading !== null || otp.length !== 6}
             className="w-full rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
           >
             {loading === "verify" ? "Memverifikasi..." : "Masuk"}
