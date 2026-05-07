@@ -34,3 +34,11 @@ export const VOICE_TOO_LONG =
 
 export const VOICE_FAILED =
   "Maaf, voice-nya kurang jelas. Tolong kirim ulang atau ketik ya 🙂";
+
+export function reminder24h(name: string, batchName: string): string {
+  return `Halo ${name}, ini pengingat: sesi pra-kelas "${batchName}" deadlinenya kurang dari 24 jam lagi. Yuk lanjutkan, kira-kira 15 menit ngobrol santai. Kirim pesan apa saja untuk lanjut ya 🙂`;
+}
+
+export function reminder2h(name: string, batchName: string): string {
+  return `Heads up ${name}, deadline sesi "${batchName}" kurang dari 2 jam lagi ⏰ Kalau bisa, selesaikan sekarang. Kirim pesan apa saja untuk lanjut.`;
+}

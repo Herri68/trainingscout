@@ -73,9 +73,15 @@ curl -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/cron/dea
 curl -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/cron/reminder
 ```
 
-## V2 WhatsApp (in progress)
+## V2 WhatsApp
 
-Fase 1 (channel toggle + UI link wa.me) dan Fase 2 (webhook + welcome/consent flow) sudah masuk. Lihat [plans/v2-whatsapp.md](plans/v2-whatsapp.md).
+Fase 1–5 sudah masuk. Lihat [plans/v2-whatsapp.md](plans/v2-whatsapp.md).
+
+- **Phase 1** ✅ channel toggle + UI link wa.me
+- **Phase 2** ✅ webhook + welcome/consent flow
+- **Phase 3** ✅ agent wiring + auto-split + typing + lock total
+- **Phase 4** ✅ voice transcribe (Groq Whisper) + reject non-audio media
+- **Phase 5** ✅ reminder cron WA (24h + 2h) + dashboard status WA + banner WAHA gangguan
 
 ### Setup WAHA managed (Sumopod / serupa)
 

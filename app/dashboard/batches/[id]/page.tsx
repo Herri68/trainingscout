@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { supabaseServer } from "@/lib/supabase/server";
-import { buildWaLink } from "@/lib/wa/config";
+import { buildWaLink, isWhatsappEnabled } from "@/lib/wa/config";
+import { getSessionStatus } from "@/lib/wa/client";
 import Link from "next/link";
 import {
   createParticipantAction,
@@ -23,6 +24,20 @@ const STATUS_STYLE: Record<string, string> = {
   in_progress: "bg-amber-100 text-amber-800",
   completed: "bg-green-100 text-green-800",
   abandoned: "bg-red-100 text-red-700",
+};
+
+const WA_STATUS_LABEL: Record<string, string> = {
+  pending: "Belum mulai",
+  pending_consent: "Menunggu konfirmasi",
+  in_progress: "Sedang wawancara",
+  completed: "Selesai",
+};
+
+const WA_STATUS_STYLE: Record<string, string> = {
+  pending: "bg-neutral-100 text-neutral-700",
+  pending_consent: "bg-blue-100 text-blue-800",
+  in_progress: "bg-amber-100 text-amber-800",
+  completed: "bg-green-100 text-green-800",
 };
 
 function formatDeadlineForInput(d: string | null): string {
@@ -48,7 +63,7 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
   const { data: participants } = await supabase
     .from("participants")
-    .select("id, name, email, phone, token, status")
+    .select("id, name, email, phone, token, status, wa_status")
     .eq("batch_id", id)
     .order("created_at", { ascending: true });
 
@@ -62,12 +77,25 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
 
   const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
   const counts = (participants ?? []).reduce<Record<string, number>>((acc, p) => {
-    acc[p.status] = (acc[p.status] ?? 0) + 1;
+    const key = isWaBatch ? (p.wa_status ?? "pending") : p.status;
+    acc[key] = (acc[key] ?? 0) + 1;
     return acc;
   }, {});
 
+  // Banner WAHA gangguan: cek session status sekali per render kalau batch WA + flag aktif.
+  let waSessionDown = false;
+  if (isWaBatch && isWhatsappEnabled()) {
+    const s = await getSessionStatus();
+    waSessionDown = !s || (s.status !== "WORKING" && s.status !== "STARTING");
+  }
+
   return (
     <div className="space-y-8">
+      {waSessionDown && (
+        <div className="rounded-md border border-amber-300 bg-amber-50 px-4 py-3 text-sm text-amber-900">
+          ⚠️ WhatsApp service sedang gangguan — pesan masuk/keluar mungkin tertunda. Batch web tidak terpengaruh.
+        </div>
+      )}
       <section>
         <div className="flex flex-wrap items-center gap-2">
           <h1 className="text-2xl font-semibold">{batch.name}</h1>
@@ -181,7 +209,10 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
           {participants && participants.length > 0 && (
             <div className="text-xs text-neutral-500">
               {Object.entries(counts)
-                .map(([k, v]) => `${STATUS_LABEL[k] ?? k}: ${v}`)
+                .map(
+                  ([k, v]) =>
+                    `${(isWaBatch ? WA_STATUS_LABEL[k] : STATUS_LABEL[k]) ?? k}: ${v}`,
+                )
                 .join(" · ")}
             </div>
           )}
@@ -200,11 +231,19 @@ export default async function BatchPage({ params }: { params: Promise<{ id: stri
                     </div>
                   </div>
                   <div className="flex items-center gap-2">
-                    <span
-                      className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[p.status] ?? ""}`}
-                    >
-                      {STATUS_LABEL[p.status] ?? p.status}
-                    </span>
+                    {isWaBatch ? (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${WA_STATUS_STYLE[p.wa_status ?? "pending"] ?? ""}`}
+                      >
+                        {WA_STATUS_LABEL[p.wa_status ?? "pending"] ?? "Belum mulai"}
+                      </span>
+                    ) : (
+                      <span
+                        className={`rounded-full px-2 py-0.5 text-xs ${STATUS_STYLE[p.status] ?? ""}`}
+                      >
+                        {STATUS_LABEL[p.status] ?? p.status}
+                      </span>
+                    )}
                     {isWaBatch ? (
                       waLink ? (
                         <CopyLinkButton link={waLink} label="Salin link WA" />
