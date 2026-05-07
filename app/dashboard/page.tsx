@@ -118,9 +118,40 @@ export default async function DashboardPage({
                       </span>
                     )}
                     {completed && (
-                      <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs text-green-800">
-                        selesai
-                      </span>
+                      <>
+                        {p.level ? (
+                          <span
+                            className={`rounded-full px-2 py-0.5 text-xs ${
+                              p.level === "pemula"
+                                ? "bg-sky-100 text-sky-800"
+                                : p.level === "menengah"
+                                  ? "bg-amber-100 text-amber-800"
+                                  : "bg-purple-100 text-purple-800"
+                            }`}
+                          >
+                            {p.level}
+                          </span>
+                        ) : (
+                          <span
+                            title="ekstraksi gagal / belum dianalisis"
+                            className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500"
+                          >
+                            —
+                          </span>
+                        )}
+                        {p.goal ? (
+                          <span className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-700">
+                            {p.goal}
+                          </span>
+                        ) : (
+                          <span
+                            title="ekstraksi gagal / belum dianalisis"
+                            className="rounded-full bg-neutral-100 px-2 py-0.5 text-xs text-neutral-500"
+                          >
+                            —
+                          </span>
+                        )}
+                      </>
                     )}
                   </div>
                 </li>

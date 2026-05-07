@@ -3,6 +3,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { systemPrompt } from "./system-prompt";
 import { TOOLS, TOOL_NAMES } from "./tools";
 import { DIMENSION_IDS, isDimensionId } from "./dimensions";
+import { extractInsightFor } from "./insight";
 
 const MODEL = "claude-haiku-4-5-20251001";
 const MAX_ITERATIONS = 6; // safety net untuk loop tool use
@@ -227,6 +228,7 @@ export async function runTurn(opts: RunOptions): Promise<RunResult> {
         .from("participants")
         .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", participant.id);
+      await extractInsightFor(participant.id);
       opts.onSessionEnded();
       break;
     }
@@ -247,6 +249,7 @@ export async function runTurn(opts: RunOptions): Promise<RunResult> {
         .from("participants")
         .update({ status: "completed", completed_at: new Date().toISOString() })
         .eq("id", participant.id);
+      await extractInsightFor(participant.id);
       opts.onSessionEnded();
     }
   }
