@@ -17,6 +17,7 @@ type WahaPayload = {
   body?: string;
   timestamp?: number;
   hasMedia?: boolean;
+  source?: string;
 };
 
 type WahaEvent = {
@@ -58,10 +59,12 @@ export async function POST(req: Request): Promise<Response> {
     return NextResponse.json({ ok: true, skipped: "non-inbound" });
   }
 
-  // Phase 2 text-only. Media handling masuk Phase 4.
-  const isText = p.type === "chat" || p.type === "text";
+  // Phase 2 text-only. Engine NOWEB tidak selalu set `type`; pakai hasMedia + body
+  // untuk deteksi. Engine WEBJS set `type === "chat"`. Media handling masuk Phase 4.
   const text = typeof p.body === "string" ? p.body.trim() : "";
-  if (!isText || !text) {
+  const isMedia = p.hasMedia === true;
+  if (isMedia || !text) {
+    console.log(`[wa/webhook] skipped non-text from=${p.from} type=${p.type ?? "?"} hasMedia=${isMedia}`);
     return NextResponse.json({ ok: true, skipped: "non-text" });
   }
 
