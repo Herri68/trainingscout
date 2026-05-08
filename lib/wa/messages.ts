@@ -23,8 +23,7 @@ export const SESSION_LOCKED =
 export const CONSENT_DECLINED =
   "Oke, kamu bisa hubungi trainermu kalau berubah pikiran. Selamat hari 🙂";
 
-export const CONSENT_GRANTED_ACK =
-  "Siap, kita mulai sebentar lagi 🙂";
+export const CONSENT_GRANTED_ACK = "Siap, kita mulai sebentar lagi 🙂";
 
 export const REJECT_MEDIA =
   "Sesi ini hanya text atau voice note ya 🙂 Tolong tulis atau kirim voice (≤2 menit) untuk dijawab.";
@@ -48,14 +47,17 @@ export function broadcastInvite(
   batchName: string,
   courseName: string | null,
   token: string,
+  waLink: string | null,
 ): string {
   const courseSuffix = courseName ? ` (${courseName})` : "";
+  const startInstruction = waLink
+    ? `Untuk mulai, klik link ini:\n${waLink}`
+    : `Untuk mulai, balas pesan ini dengan:\nHalo TrainingScout ${token}`;
   return `Halo ${name}! 👋
 
 Trainer mengundang kamu ikut sesi pra-kelas singkat untuk "${batchName}"${courseSuffix}. Sesi ~15 menit ngobrol santai dengan asisten kami.
 
-Untuk mulai, balas pesan ini dengan:
-Halo TrainingScout ${token}
+${startInstruction}
 
 Sampai ketemu! 🙂`;
 }

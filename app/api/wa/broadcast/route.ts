@@ -7,6 +7,7 @@ import { supabaseAdmin } from "@/lib/supabase/admin";
 import { sendText, getSessionStatus } from "@/lib/wa/client";
 import { normalizePhoneToJid } from "@/lib/wa/phone";
 import { broadcastInvite } from "@/lib/wa/messages";
+import { buildWaLink } from "@/lib/wa/config";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -32,11 +33,17 @@ export async function POST(req: Request): Promise<Response> {
   try {
     body = (await req.json()) as { batch_id?: string };
   } catch {
-    return NextResponse.json({ ok: false, reason: "invalid_body" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, reason: "invalid_body" },
+      { status: 400 },
+    );
   }
   const batchId = body.batch_id;
   if (!batchId) {
-    return NextResponse.json({ ok: false, reason: "missing_batch_id" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, reason: "missing_batch_id" },
+      { status: 400 },
+    );
   }
 
   // Auth: trainer harus owner batch.
@@ -45,7 +52,10 @@ export async function POST(req: Request): Promise<Response> {
     data: { user },
   } = await supa.auth.getUser();
   if (!user) {
-    return NextResponse.json({ ok: false, reason: "unauthorized" }, { status: 401 });
+    return NextResponse.json(
+      { ok: false, reason: "unauthorized" },
+      { status: 401 },
+    );
   }
 
   const { data: batch } = await supa
@@ -62,21 +72,36 @@ export async function POST(req: Request): Promise<Response> {
     }>();
 
   if (!batch || batch.created_by_user_id !== user.id) {
-    return NextResponse.json({ ok: false, reason: "forbidden" }, { status: 403 });
+    return NextResponse.json(
+      { ok: false, reason: "forbidden" },
+      { status: 403 },
+    );
   }
   if (batch.channel !== "whatsapp") {
-    return NextResponse.json({ ok: false, reason: "not_wa_batch" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, reason: "not_wa_batch" },
+      { status: 400 },
+    );
   }
   if (batch.status === "closed") {
-    return NextResponse.json({ ok: false, reason: "batch_closed" }, { status: 400 });
+    return NextResponse.json(
+      { ok: false, reason: "batch_closed" },
+      { status: 400 },
+    );
   }
 
   if (process.env.WHATSAPP_ENABLED !== "true") {
-    return NextResponse.json({ ok: false, reason: "wa_unavailable" }, { status: 503 });
+    return NextResponse.json(
+      { ok: false, reason: "wa_unavailable" },
+      { status: 503 },
+    );
   }
   const sess = await getSessionStatus();
   if (!sess || (sess.status !== "WORKING" && sess.status !== "STARTING")) {
-    return NextResponse.json({ ok: false, reason: "wa_unavailable" }, { status: 503 });
+    return NextResponse.json(
+      { ok: false, reason: "wa_unavailable" },
+      { status: 503 },
+    );
   }
 
   const admin = supabaseAdmin();
@@ -105,8 +130,15 @@ export async function POST(req: Request): Promise<Response> {
     token: string;
   }>) {
     if (!p.phone || !p.phone.trim()) {
-      results.push({ participant_id: p.id, name: p.name, status: "skipped", reason: "no_phone" });
-      console.log(`[wa/broadcast] skipped participant_id=${p.id} reason=no_phone`);
+      results.push({
+        participant_id: p.id,
+        name: p.name,
+        status: "skipped",
+        reason: "no_phone",
+      });
+      console.log(
+        `[wa/broadcast] skipped participant_id=${p.id} reason=no_phone`,
+      );
       skipped++;
       continue;
     }
@@ -118,7 +150,9 @@ export async function POST(req: Request): Promise<Response> {
         status: "skipped",
         reason: "invalid_phone",
       });
-      console.log(`[wa/broadcast] skipped participant_id=${p.id} reason=invalid_phone`);
+      console.log(
+        `[wa/broadcast] skipped participant_id=${p.id} reason=invalid_phone`,
+      );
       skipped++;
       continue;
     }
@@ -129,7 +163,13 @@ export async function POST(req: Request): Promise<Response> {
     }
     firstSendDone = true;
 
-    const text = broadcastInvite(p.name, batch.name, batch.course_name, p.token);
+    const text = broadcastInvite(
+      p.name,
+      batch.name,
+      batch.course_name,
+      p.token,
+      buildWaLink(p.token),
+    );
     try {
       await sendText(jid, text);
       await admin
@@ -137,12 +177,21 @@ export async function POST(req: Request): Promise<Response> {
         .update({ wa_broadcast_sent_at: new Date().toISOString() })
         .eq("id", p.id);
       results.push({ participant_id: p.id, name: p.name, status: "sent" });
-      console.log(`[wa/broadcast] sent participant_id=${p.id} jid=${maskJid(jid)}`);
+      console.log(
+        `[wa/broadcast] sent participant_id=${p.id} jid=${maskJid(jid)}`,
+      );
       sent++;
     } catch (err) {
       const msg = (err as Error).message;
-      results.push({ participant_id: p.id, name: p.name, status: "failed", reason: msg });
-      console.error(`[wa/broadcast] failed participant_id=${p.id} reason=${msg}`);
+      results.push({
+        participant_id: p.id,
+        name: p.name,
+        status: "failed",
+        reason: msg,
+      });
+      console.error(
+        `[wa/broadcast] failed participant_id=${p.id} reason=${msg}`,
+      );
       failed++;
     }
   }
