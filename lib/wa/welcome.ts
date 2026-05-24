@@ -69,13 +69,19 @@ type BatchRow = {
 export async function handleWelcomeFlow(
   jid: string,
   joinedText: string,
-): Promise<{ readyForAgent: boolean; participantId: string | null; token: string | null }> {
+): Promise<{
+  readyForAgent: boolean;
+  participantId: string | null;
+  token: string | null;
+}> {
   const supabase = supabaseAdmin();
 
   // 1. Cek apakah JID sudah claim peserta.
   const { data: existing } = await supabase
     .from("participants")
-    .select("id, name, batch_id, token, phone_jid, wa_status, session_locked_at")
+    .select(
+      "id, name, batch_id, token, phone_jid, wa_status, session_locked_at",
+    )
     .eq("phone_jid", jid)
     .maybeSingle<ParticipantRow>();
 
@@ -92,7 +98,9 @@ export async function handleWelcomeFlow(
 
   const { data: byToken } = await supabase
     .from("participants")
-    .select("id, name, batch_id, token, phone_jid, wa_status, session_locked_at")
+    .select(
+      "id, name, batch_id, token, phone_jid, wa_status, session_locked_at",
+    )
     .eq("token", token)
     .maybeSingle<ParticipantRow>();
 
@@ -128,15 +136,26 @@ export async function handleWelcomeFlow(
     .update({ phone_jid: jid, wa_status: "pending_consent" })
     .eq("id", byToken.id);
 
-  await sendBubbles(jid, [welcomeBubble1(byToken.name), welcomeBubble2(batch.name)]);
-  return { readyForAgent: false, participantId: byToken.id, token: byToken.token };
+  await sendBubbles(jid, [
+    welcomeBubble1(byToken.name),
+    welcomeBubble2(batch.name),
+  ]);
+  return {
+    readyForAgent: false,
+    participantId: byToken.id,
+    token: byToken.token,
+  };
 }
 
 async function handleClaimedJid(
   p: ParticipantRow,
   joinedText: string,
   jid: string,
-): Promise<{ readyForAgent: boolean; participantId: string | null; token: string | null }> {
+): Promise<{
+  readyForAgent: boolean;
+  participantId: string | null;
+  token: string | null;
+}> {
   const supabase = supabaseAdmin();
 
   if (p.session_locked_at || p.wa_status === "completed") {
@@ -162,11 +181,13 @@ async function handleClaimedJid(
     }
     await supabase
       .from("participants")
-      .update({ wa_status: "in_progress", started_at: new Date().toISOString() })
+      .update({
+        wa_status: "in_progress",
+        started_at: new Date().toISOString(),
+      })
       .eq("id", p.id);
     await safeSend(jid, CONSENT_GRANTED_ACK);
-    // Phase 2 stops here; Phase 3 will invoke agent on the next inbound turn.
-    return { readyForAgent: false, participantId: p.id, token: p.token };
+    return { readyForAgent: true, participantId: p.id, token: p.token };
   }
 
   if (p.wa_status === "in_progress") {
