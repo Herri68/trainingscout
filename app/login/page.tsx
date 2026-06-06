@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
 
 type SuccessState = {
@@ -14,6 +14,19 @@ export default function LoginPage() {
   const [success, setSuccess] = useState<SuccessState | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState<"wa" | "email" | null>(null);
+
+  useEffect(() => {
+    const hash = window.location.hash.slice(1);
+    if (!hash) return;
+    const params = new URLSearchParams(hash);
+    const errorCode = params.get("error_code");
+    if (errorCode === "otp_expired") {
+      setError("Link sudah kadaluarsa. Minta magic link baru di bawah.");
+    } else if (params.get("error")) {
+      setError("Link tidak valid. Minta magic link baru di bawah.");
+    }
+    window.history.replaceState(null, "", window.location.pathname);
+  }, []);
 
   async function submitWa(e: React.FormEvent) {
     e.preventDefault();
@@ -88,21 +101,26 @@ export default function LoginPage() {
         <div className="mt-6 space-y-2 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
           {success.channel === "wa" ? (
             <p>
-              Magic link sudah dikirim ke WhatsApp <b>{success.maskedDestination}</b>.
+              Magic link sudah dikirim ke WhatsApp{" "}
+              <b>{success.maskedDestination}</b>.
             </p>
           ) : (
             <>
               {success.fallback && (
                 <p className="text-amber-800">
-                  ⚠️ WhatsApp sedang gangguan, link dikirim ke email sebagai fallback.
+                  ⚠️ WhatsApp sedang gangguan, link dikirim ke email sebagai
+                  fallback.
                 </p>
               )}
               <p>
-                Magic link sudah dikirim ke email <b>{success.maskedDestination}</b>.
+                Magic link sudah dikirim ke email{" "}
+                <b>{success.maskedDestination}</b>.
               </p>
             </>
           )}
-          <p className="text-xs text-green-800/80">Link berlaku ~1 jam, sekali pakai.</p>
+          <p className="text-xs text-green-800/80">
+            Link berlaku ~1 jam, sekali pakai.
+          </p>
         </div>
       ) : (
         <form onSubmit={submitWa} className="mt-6 space-y-4">
@@ -119,7 +137,9 @@ export default function LoginPage() {
             disabled={loading !== null}
             className="w-full rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
           >
-            {loading === "wa" ? "Mengirim ke WhatsApp..." : "Kirim magic link via WhatsApp"}
+            {loading === "wa"
+              ? "Mengirim ke WhatsApp..."
+              : "Kirim magic link via WhatsApp"}
           </button>
           <button
             type="button"
