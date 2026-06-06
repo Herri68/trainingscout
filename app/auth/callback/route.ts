@@ -3,6 +3,7 @@ import { supabaseServer } from "@/lib/supabase/server";
 
 export async function GET(request: Request) {
   const url = new URL(request.url);
+  console.log("[auth/callback] search:", url.search, "hash:", url.hash);
   const code = url.searchParams.get("code");
   if (code) {
     const supabase = await supabaseServer();
