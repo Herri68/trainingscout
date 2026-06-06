@@ -2,18 +2,23 @@
 
 import { useState, useEffect } from "react";
 import { supabaseBrowser } from "@/lib/supabase/client";
+import { useRouter } from "next/navigation";
 
 type SuccessState = {
   channel: "wa" | "email";
   maskedDestination: string;
   fallback: boolean;
+  otpMode?: boolean;
+  email?: string;
 };
 
 export default function LoginPage() {
+  const router = useRouter();
   const [email, setEmail] = useState("");
   const [success, setSuccess] = useState<SuccessState | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [loading, setLoading] = useState<"wa" | "email" | null>(null);
+  const [loading, setLoading] = useState<"wa" | "email" | "otp" | null>(null);
+  const [otp, setOtp] = useState("");
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
@@ -44,6 +49,8 @@ export default function LoginPage() {
         reason?: string;
         channel?: "wa" | "email";
         maskedDestination?: string;
+        otpMode?: boolean;
+        email?: string;
       };
       if (res.status === 429) {
         setError("Terlalu banyak percobaan. Coba lagi 30 detik.");
@@ -55,7 +62,7 @@ export default function LoginPage() {
         } else if (data.reason === "invalid_email") {
           setError("Format email tidak valid.");
         } else {
-          setError("Gagal mengirim magic link. Coba lagi.");
+          setError("Gagal mengirim kode. Coba lagi.");
         }
         return;
       }
@@ -63,12 +70,33 @@ export default function LoginPage() {
         channel: data.channel ?? "wa",
         maskedDestination: data.maskedDestination ?? "",
         fallback: data.channel === "email",
+        otpMode: data.otpMode,
+        email: data.email,
       });
     } catch {
       setError("Network error. Coba lagi.");
     } finally {
       setLoading(null);
     }
+  }
+
+  async function submitOtp(e: React.FormEvent) {
+    e.preventDefault();
+    if (!success?.email) return;
+    setLoading("otp");
+    setError(null);
+    const supabase = supabaseBrowser();
+    const { error } = await supabase.auth.verifyOtp({
+      email: success.email,
+      token: otp.trim(),
+      type: "email",
+    });
+    setLoading(null);
+    if (error) {
+      setError("Kode salah atau sudah kadaluarsa. Coba minta kode baru.");
+      return;
+    }
+    router.replace("/dashboard");
   }
 
   async function submitEmail() {
@@ -90,19 +118,62 @@ export default function LoginPage() {
       });
   }
 
+  // OTP input mode setelah WA berhasil dikirim
+  if (success?.otpMode) {
+    return (
+      <main className="mx-auto max-w-md px-6 py-20">
+        <h1 className="text-2xl font-semibold">Masukkan kode</h1>
+        <p className="mt-2 text-sm text-neutral-600">
+          Kode 6 digit sudah dikirim ke WhatsApp{" "}
+          <b>{success.maskedDestination}</b>.
+        </p>
+        <form onSubmit={submitOtp} className="mt-6 space-y-4">
+          <input
+            type="text"
+            inputMode="numeric"
+            maxLength={6}
+            required
+            value={otp}
+            onChange={(e) => setOtp(e.target.value.replace(/\D/g, ""))}
+            placeholder="123456"
+            className="w-full rounded-md border border-neutral-300 px-3 py-2 text-center text-2xl tracking-widest outline-none focus:border-neutral-900"
+          />
+          <button
+            type="submit"
+            disabled={loading !== null || otp.length < 6}
+            className="w-full rounded-md bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
+          >
+            {loading === "otp" ? "Memverifikasi..." : "Masuk"}
+          </button>
+          {error && <p className="text-sm text-red-600">{error}</p>}
+          <button
+            type="button"
+            onClick={() => {
+              setSuccess(null);
+              setOtp("");
+              setError(null);
+            }}
+            className="w-full text-sm text-neutral-500 hover:underline"
+          >
+            Minta kode baru
+          </button>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <main className="mx-auto max-w-md px-6 py-20">
       <h1 className="text-2xl font-semibold">Masuk sebagai trainer</h1>
       <p className="mt-2 text-sm text-neutral-600">
-        Kami akan kirim magic link ke WhatsApp atau email kamu.
+        Kami akan kirim kode masuk ke WhatsApp atau email kamu.
       </p>
 
       {success ? (
         <div className="mt-6 space-y-2 rounded-md border border-green-200 bg-green-50 p-4 text-sm text-green-900">
           {success.channel === "wa" ? (
             <p>
-              Magic link sudah dikirim ke WhatsApp{" "}
-              <b>{success.maskedDestination}</b>.
+              Kode sudah dikirim ke WhatsApp <b>{success.maskedDestination}</b>.
             </p>
           ) : (
             <>
@@ -139,7 +210,7 @@ export default function LoginPage() {
           >
             {loading === "wa"
               ? "Mengirim ke WhatsApp..."
-              : "Kirim magic link via WhatsApp"}
+              : "Kirim kode via WhatsApp"}
           </button>
           <button
             type="button"
