@@ -8,35 +8,38 @@ export default function AuthCallbackPage() {
   const router = useRouter();
 
   useEffect(() => {
-    async function handle() {
-      const supabase = supabaseBrowser();
+    const supabase = supabaseBrowser();
 
-      // Supabase magic link (generateLink admin) redirect ke sini dengan
-      // session di fragment hash: #access_token=...&refresh_token=...&type=magiclink
-      // supabase-js otomatis detect dan set session dari hash.
-      const { data, error } = await supabase.auth.getSession();
+    // Supabase magic link (generateLink admin) mengirim session via hash fragment:
+    // #access_token=...&refresh_token=...&type=magiclink
+    // supabase-js v2 detect ini otomatis via onAuthStateChange.
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((event, session) => {
+      if (session) {
+        subscription.unsubscribe();
+        router.replace("/dashboard");
+      } else if (event === "SIGNED_OUT" || event === "TOKEN_REFRESHED") {
+        subscription.unsubscribe();
+        router.replace("/login#error=access_denied&error_code=otp_expired");
+      }
+    });
+
+    // Timeout fallback: kalau 5 detik tidak ada event, berarti tidak ada hash session
+    const timeout = setTimeout(async () => {
+      subscription.unsubscribe();
+      const { data } = await supabase.auth.getSession();
       if (data.session) {
         router.replace("/dashboard");
-        return;
+      } else {
+        router.replace("/login#error=access_denied&error_code=otp_expired");
       }
+    }, 5000);
 
-      // Kalau belum ada session, coba exchange — supabase-js akan baca hash otomatis.
-      const { error: sessionError } =
-        await supabase.auth.exchangeCodeForSession(window.location.href);
-      if (!sessionError) {
-        router.replace("/dashboard");
-        return;
-      }
-
-      console.error(
-        "[auth/callback] failed:",
-        error?.message,
-        sessionError?.message,
-      );
-      router.replace("/login#error=access_denied&error_code=otp_expired");
-    }
-
-    handle();
+    return () => {
+      subscription.unsubscribe();
+      clearTimeout(timeout);
+    };
   }, [router]);
 
   return (
