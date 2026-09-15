@@ -230,3 +230,29 @@ it("balasan yang dikirim dan disimpan adalah hasil tulisan ulang, beserta riwaya
     }),
   );
 });
+
+it("jawaban feedback yang tercatat diteruskan ke penulis agar tidak ditolak sebagai di luar konteks", async () => {
+  mocks.rpc.mockImplementation(async (name) => ({
+    data:
+      name === "cs_claim"
+        ? {
+            ...initialContact(jid),
+            welcomed: true,
+            name: "Rinto",
+            business: "Bengkel motor",
+            framework_sent: true,
+            feedback: ["Seru", "Bahas mitra", "Semua ok", null],
+          }
+        : null,
+    error: null,
+  }));
+  mocks.from.mockReturnValue(freshQuery());
+  mocks.understand.mockResolvedValue({ feedback: "AI coding" });
+  await runMasLini(jid, "m10", "ai coding");
+  expect(mocks.composeReply).toHaveBeenCalledWith(
+    expect.objectContaining({
+      message: "ai coding",
+      recordedAnswer: "AI coding",
+    }),
+  );
+});

@@ -32,6 +32,8 @@ export type Contact = {
   pending_notices?: Notice[];
   // Riwayat singkat agar balasan ditulis natural sesuai konteks.
   history?: Turn[];
+  // Info boleh melewati/berhenti cukup disampaikan sekali.
+  skip_hint_given?: boolean;
 };
 export type Understanding = {
   name?: string;
@@ -122,6 +124,12 @@ export function advance(
     const next = contact.feedback.findIndex((f) => f === null);
     if (!wasFinished && (contact.feedback_stopped || next < 0))
       notices.push({ type: "review" });
+    // Info boleh melewati cukup sekali agar tidak terdengar seperti robot.
+    const skipHint =
+      !contact.feedback_stopped && next >= 0 && !contact.skip_hint_given
+        ? " Kakak boleh melewati pertanyaan atau berhenti kapan saja."
+        : "";
+    if (skipHint) contact.skip_hint_given = true;
     const link = input.request_framework
       ? `Ini link framework-nya${name}: ${FRAMEWORK}\n\n`
       : "";
@@ -129,7 +137,7 @@ export function advance(
       link +
       (contact.feedback_stopped || next < 0
         ? `Terima kasih${name}! Semoga framework-nya bermanfaat. Jika membutuhkan bantuan lebih lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
-        : `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]} Kakak boleh melewati pertanyaan atau berhenti kapan saja.`);
+        : `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]}${skipHint}`);
   }
   if (notices.length)
     contact.pending_notices = [

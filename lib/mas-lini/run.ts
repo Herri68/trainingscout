@@ -50,13 +50,15 @@ export async function runMasLini(
       // Privacy ID (@lid) is not a phone number; resolve it before asking the user.
       if (!contact.phone && jid.endsWith("@lid"))
         contact.phone = await lookupPhoneByLid(jid);
-      const result = advance(contact, await understand(contact, text), text);
+      const understanding = await understand(contact, text);
+      const result = advance(contact, understanding, text);
       // Alur tetap dari flow.ts; kalimatnya ditulis ulang agar luwes seperti CS manusia.
       result.reply = await composeReply({
         contact: result.contact,
         message: text,
         draft: result.reply,
         history: contact.history ?? [],
+        recordedAnswer: understanding.feedback,
       });
       result.contact.history = [
         ...(contact.history ?? []),

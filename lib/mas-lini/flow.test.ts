@@ -154,6 +154,19 @@ describe("Mas Lini", () => {
     result = advance(result.contact, { decline_feedback: true });
     expect(result.contact.pending_notices).toEqual([{ type: "review" }]);
   });
+  it("info boleh melewati pertanyaan hanya disampaikan sekali", () => {
+    let result = advance(initialContact("628123456789@c.us"), {
+      name: "Ayu",
+      business: "Kue",
+    });
+    const hints: boolean[] = [];
+    for (const feedback of ["Bagus", "Contohnya", "Sudah jelas"]) {
+      result = advance(result.contact, { feedback });
+      hints.push(result.reply.includes("boleh melewati"));
+    }
+    expect(hints).toEqual([true, false, false]);
+    expect(advance(result.contact, {}).reply).not.toContain("boleh melewati");
+  });
   it("menolak output model rusak dan tidak menerima status dari model", () => {
     expect(() => parseUnderstanding('{"negative":"false"}')).toThrow();
     expect(() => parseUnderstanding("[]")).toThrow();
