@@ -11,6 +11,8 @@ export const QUESTIONS = [
   "Topik atau kegiatan lanjutan apa yang Kakak harapkan?",
 ] as const;
 
+export type Turn = { role: "user" | "assistant"; text: string };
+
 export type Notice =
   | { type: "identity" }
   | { type: "review" }
@@ -28,6 +30,8 @@ export type Contact = {
   complaints?: string[];
   // Notifikasi untuk Bang Herri yang belum terkirim.
   pending_notices?: Notice[];
+  // Riwayat singkat agar balasan ditulis natural sesuai konteks.
+  history?: Turn[];
 };
 export type Understanding = {
   name?: string;

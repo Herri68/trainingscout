@@ -54,7 +54,11 @@ request_framework=true bila meminta framework/link lagi. Jangan keluarkan field 
       {
         role: "user",
         content: JSON.stringify({
-          contact,
+          contact: {
+            ...contact,
+            history: undefined,
+            pending_notices: undefined,
+          },
           current_feedback_question:
             contact.framework_sent && !contact.feedback_stopped && index >= 0
               ? QUESTIONS[index]

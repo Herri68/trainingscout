@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { lookupPhoneByLid, sendText } from "@/lib/wa/client";
 import { advance, Contact, initialContact } from "./flow";
+import { composeReply } from "./compose";
 import { buildNotice } from "./notify";
 import { understand } from "./understand";
 
@@ -50,6 +51,18 @@ export async function runMasLini(
       if (!contact.phone && jid.endsWith("@lid"))
         contact.phone = await lookupPhoneByLid(jid);
       const result = advance(contact, await understand(contact, text), text);
+      // Alur tetap dari flow.ts; kalimatnya ditulis ulang agar luwes seperti CS manusia.
+      result.reply = await composeReply({
+        contact: result.contact,
+        message: text,
+        draft: result.reply,
+        history: contact.history ?? [],
+      });
+      result.contact.history = [
+        ...(contact.history ?? []),
+        { role: "user" as const, text: text.slice(0, 1000) },
+        { role: "assistant" as const, text: result.reply },
+      ].slice(-12);
       const saved = await db.rpc("cs_prepare", {
         p_jid: jid,
         p_lease: lease,

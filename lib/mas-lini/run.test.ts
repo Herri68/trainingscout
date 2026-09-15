@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   lookupPhoneByLid: vi.fn(),
   understand: vi.fn(),
   buildNotice: vi.fn(),
+  composeReply: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   supabaseAdmin: () => ({ rpc: mocks.rpc, from: mocks.from }),
@@ -17,10 +18,14 @@ vi.mock("@/lib/wa/client", () => ({
 }));
 vi.mock("./understand", () => ({ understand: mocks.understand }));
 vi.mock("./notify", () => ({ buildNotice: mocks.buildNotice }));
+vi.mock("./compose", () => ({ composeReply: mocks.composeReply }));
 import { runMasLini } from "./run";
 const jid = "628123456789@c.us";
 beforeEach(() => {
   vi.resetAllMocks();
+  mocks.composeReply.mockImplementation(
+    async ({ draft }: { draft: string }) => draft,
+  );
   mocks.rpc.mockImplementation(async (name) => ({
     data: name === "cs_claim" ? initialContact(jid) : null,
     error: null,
@@ -195,4 +200,33 @@ it("notifikasi gagal tidak menggagalkan balasan peserta dan tetap tertunda", asy
     .mockRejectedValueOnce(new Error("WAHA down"));
   await expect(runMasLini(jid, "m1", "Saya Ayu")).resolves.toBeUndefined();
   expect(query.update).not.toHaveBeenCalledWith({ state: expect.anything() });
+});
+
+it("balasan yang dikirim dan disimpan adalah hasil tulisan ulang, beserta riwayat percakapan", async () => {
+  const query = freshQuery();
+  mocks.from.mockReturnValue(query);
+  mocks.understand.mockResolvedValue({});
+  const natural = "Waalaikumsalam, Kak! Saya Mas Lini. Boleh tahu nama Kakak?";
+  mocks.composeReply.mockResolvedValue(natural);
+  await runMasLini(jid, "m9", "Assalamualaikum");
+  expect(mocks.composeReply).toHaveBeenCalledWith(
+    expect.objectContaining({
+      message: "Assalamualaikum",
+      draft: expect.stringContaining("Boleh tahu nama Kakak"),
+      history: [],
+    }),
+  );
+  expect(mocks.sendText).toHaveBeenCalledWith(jid, natural);
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    "cs_prepare",
+    expect.objectContaining({
+      p_reply: natural,
+      p_state: expect.objectContaining({
+        history: [
+          { role: "user", text: "Assalamualaikum" },
+          { role: "assistant", text: natural },
+        ],
+      }),
+    }),
+  );
 });
