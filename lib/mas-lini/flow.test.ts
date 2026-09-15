@@ -1,0 +1,80 @@
+import { describe, expect, it } from "vitest";
+import { advance, initialContact, FRAMEWORK } from "./flow";
+import { parseUnderstanding } from "./understand";
+
+describe("Mas Lini", () => {
+  it("memberikan framework setelah identitas lengkap sebelum menggali feedback", () => {
+    const contact = initialContact("628123456789@c.us");
+    const first = advance(contact, { name: "Ayu", business: "Toko kue" });
+    expect(first.contact.name).toBe("Ayu");
+    expect(first.contact.phone).toBe("628123456789");
+    expect(first.reply).toContain(FRAMEWORK);
+    expect(first.reply).toContain("kesan");
+    expect(first.contact.framework_sent).toBe(true);
+  });
+  it("mengenali kontak bertahap dan mempertahankan nama saat chat berikutnya", () => {
+    let result = advance(initialContact("628123456789@c.us"), {});
+    expect(result.reply).toContain("Boleh tahu namanya");
+    expect(result.reply).toContain("disimpan");
+    result = advance(result.contact, { name: "Dina" });
+    expect(result.reply).toContain("Dina");
+    expect(result.reply).not.toContain(FRAMEWORK);
+    result = advance(result.contact, { business: "Belum punya bisnis" });
+    expect(result.reply).toContain(FRAMEWORK);
+    expect(result.contact.name).toBe("Dina");
+  });
+  it("tidak menganggap LID sebagai nomor HP", () => {
+    const first = advance(initialContact("123456789012345@lid"), {
+      name: "Dina",
+      business: "Kopi",
+    });
+    expect(first.contact.phone).toBeNull();
+    expect(first.reply).toContain("nomor HP");
+    const next = advance(first.contact, { phone: "081234567890" });
+    expect(next.contact.phone).toBe("6281234567890");
+    expect(next.reply).toContain(FRAMEWORK);
+  });
+  it("feedback selesai tidak mengunci chat dan framework bisa diminta lagi", () => {
+    let result = advance(initialContact("628123456789@c.us"), {
+      name: "Ayu",
+      business: "Kue",
+    });
+    for (const feedback of ["Bagus", "Contohnya", "Sudah jelas", "Praktik AI"])
+      result = advance(result.contact, { feedback });
+    expect(result.contact.feedback.filter(Boolean)).toHaveLength(4);
+    result = advance(result.contact, { request_framework: true });
+    expect(result.reply).toContain(FRAMEWORK);
+    expect(result.reply).not.toContain("kesan kamu");
+  });
+  it("penolakan feedback tetap mendapat framework dan menghentikan pertanyaan", () => {
+    const result = advance(initialContact("628123456789@c.us"), {
+      name: "Ayu",
+      business: "Kue",
+      decline_feedback: true,
+    });
+    expect(result.reply).toContain(FRAMEWORK);
+    expect(result.contact.feedback_stopped).toBe(true);
+    expect(advance(result.contact, {}).reply).not.toContain("?");
+  });
+  it("respons negatif langsung dialihkan dan tidak ditanya feedback lagi", () => {
+    const first = advance(initialContact("628123456789@c.us"), {
+      name: "Ayu",
+      negative: true,
+    });
+    expect(first.reply).toContain("Bang Herri");
+    expect(first.reply).toContain("08112268556");
+    expect(first.reply).not.toContain("?");
+    expect(
+      advance(first.contact, { feedback: "jawaban" }).contact.feedback,
+    ).toEqual([null, null, null, null]);
+  });
+  it("menolak output model rusak dan tidak menerima status dari model", () => {
+    expect(() => parseUnderstanding('{"negative":"false"}')).toThrow();
+    expect(() => parseUnderstanding("[]")).toThrow();
+    expect(
+      parseUnderstanding(
+        '{"name":"Ayu","framework_sent":true,"phone_jid":"attacker"}',
+      ),
+    ).toEqual({ name: "Ayu" });
+  });
+});

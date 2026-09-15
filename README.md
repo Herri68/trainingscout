@@ -1,4 +1,24 @@
-# TrainingScout
+# Mas Lini — CS AI Bang Herri
+
+WhatsApp masuk tanpa undangan/token → nama → bisnis → framework Creative Talk → empat topik feedback opsional. Nomor pengirim disimpan bersama nama/bisnis di `cs_contacts`. Jika pengirim berupa `@lid`, bot meminta nomor HP karena LID bukan nomor telepon. Respons negatif dialihkan ke Bang Herri, 08112268556. Percakapan tetap bisa dibalas setelah feedback selesai.
+
+## Aktivasi versi Mas Lini
+
+1. Jalankan `supabase/migrations/0008_mas_lini.sql` pada Supabase sebelum deployment. Migrasi menambahkan tabel dan fungsi, tanpa menghapus data training lama. Tabel baru hanya dapat diakses server (`service_role`), tanpa akses anon/authenticated.
+2. Gunakan konfigurasi WAHA/Supabase/Anthropic yang sudah ada. `WHATSAPP_ENABLED=true`, `WAHA_SESSION_NAME` harus sama dengan session pada webhook; `WAHA_NUMBER` adalah nomor **bot**, format internasional tanpa +, bukan nomor pengalihan Bang Herri. Jangan membagikan secret.
+3. Webhook tetap `/api/wa/webhook`, event `message`, HMAC SHA512. Aktifkan retry WAHA untuk respons HTTP 503. Kiriman harus memiliki ID pesan dan session. Grup, broadcast/status, pesan dari bot sendiri, dan session lain diabaikan.
+4. Deploy kode setelah migrasi. Jadwal cron lama dihapus dari konfigurasi. Halaman dan API training lama mengembalikan HTTP 410. Kode/data lama dipertahankan untuk pemulihan, tetapi tidak dipakai Mas Lini.
+5. Uji dengan nomor WhatsApp asli: kontak baru, nama/bisnis, link framework, empat jawaban, penolakan feedback, tanggapan negatif, dan chat kembali. Pastikan folder Drive dapat dibuka peserta tanpa permintaan akses.
+
+`lib/mas-lini/flow.ts` memuat link framework, nomor pengalihan, pertanyaan dan alur. `understand.ts` mengekstrak jawaban dengan AI; `run.ts` menyimpan progres dan mengirim balasan. Tidak ada dashboard/laporan baru atau pengiriman pesan otomatis ke Bang Herri.
+
+`cs_replies` menyimpan balasan untuk retry/deduplikasi, bukan fitur riwayat percakapan peserta. Progres empat topik disimpan pada `cs_contacts.state.feedback`. Pengiriman WAHA tidak mendukung transaksi bersama database: jika pesan terkirim tetapi konfirmasi database gagal, retry dapat mengirim balasan yang sama. Progres tidak diulang. Jika retry pesan terdahulu habis, balasan pending perlu diperiksa operator sebelum kontak dapat diproses kembali.
+
+Validasi lokal: `npm run typecheck`, `npm test`, `npm run build`. Skrip lint warisan memerlukan konfigurasi ESLint terlebih dahulu. Migrasi dan integrasi WAHA/AI live harus diverifikasi saat aktivasi.
+
+---
+
+## Dokumentasi TrainingScout sebelumnya (arsip)
 
 Agent pra-kelas yang memetakan kesiapan peserta sebelum pelatihan AI coding / vibe coding / app-building dengan AI. Trainer upload daftar peserta, peserta diwawancara via chat adaptif, sistem menghasilkan class brief untuk trainer.
 
@@ -68,6 +88,7 @@ Vercel Cron config ada di [vercel.json](vercel.json):
 Setup env vars di Vercel: `RESEND_API_KEY`, `EMAIL_FROM`, `CRON_SECRET` (random string ≥32 karakter; Vercel Cron otomatis mengirim header `Authorization: Bearer <CRON_SECRET>`).
 
 Test manual lokal:
+
 ```
 curl -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/cron/deadline
 curl -H "Authorization: Bearer <CRON_SECRET>" http://localhost:3000/api/cron/reminder

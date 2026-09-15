@@ -1,184 +1,92 @@
-// POST /api/wa/webhook — terima webhook event dari WAHA (managed).
-// WAHA payload native: { event, session, payload: { from, fromMe, type, body, timestamp, ... } }
-// Header auth: `X-Webhook-Hmac` = sha512 hex dari raw body, key = WAHA_WEBHOOK_HMAC_SECRET
-// (set di dashboard WAHA → HMAC Key).
-
 import { NextResponse } from "next/server";
 import { verifyWahaHmac } from "@/lib/wa/hmac";
-import { handleWelcomeFlow } from "@/lib/wa/welcome";
-import { runTurn } from "@/lib/agent/run";
-import { sendChunked } from "@/lib/wa/client";
-import { supabaseAdmin } from "@/lib/supabase/admin";
-import { SESSION_LOCKED, REJECT_MEDIA, VOICE_TOO_LONG, VOICE_FAILED } from "@/lib/wa/messages";
 import { sendText } from "@/lib/wa/client";
+import { runMasLini } from "@/lib/mas-lini/run";
 import { transcribeAudio } from "@/lib/wa/transcribe";
+import { REJECT_MEDIA, VOICE_TOO_LONG, VOICE_FAILED } from "@/lib/wa/messages";
 
 export const runtime = "nodejs";
-export const maxDuration = 60;
-
-type WahaMedia = {
-  url?: string;
-  mimetype?: string;
-  duration?: number;
-  filename?: string;
-};
-
-type WahaPayload = {
-  id?: string;
-  from?: string;
-  fromMe?: boolean;
-  type?: string;
-  body?: string;
-  timestamp?: number;
-  hasMedia?: boolean;
-  source?: string;
-  media?: WahaMedia;
-  _data?: { seconds?: number };
-};
-
-const MAX_VOICE_SECONDS = 120;
-
+export const maxDuration = 120;
 type WahaEvent = {
   event?: string;
   session?: string;
-  payload?: WahaPayload;
+  payload?: {
+    id?: string;
+    from?: string;
+    fromMe?: boolean;
+    body?: string;
+    type?: string;
+    hasMedia?: boolean;
+    media?: { url?: string; mimetype?: string; duration?: number };
+    _data?: { seconds?: number };
+  };
 };
-
 export async function POST(req: Request): Promise<Response> {
-  if (process.env.WHATSAPP_ENABLED !== "true") {
+  if (process.env.WHATSAPP_ENABLED !== "true")
     return NextResponse.json({ error: "wa disabled" }, { status: 503 });
-  }
-
   const secret = process.env.WAHA_WEBHOOK_HMAC_SECRET;
-  if (!secret) {
-    return NextResponse.json({ error: "server misconfigured" }, { status: 500 });
-  }
-
+  if (!secret)
+    return NextResponse.json(
+      { error: "server misconfigured" },
+      { status: 500 },
+    );
   const raw = await req.text();
-  const sig = req.headers.get("x-webhook-hmac");
-  if (!verifyWahaHmac(raw, sig, secret)) {
+  if (!verifyWahaHmac(raw, req.headers.get("x-webhook-hmac"), secret))
     return NextResponse.json({ error: "invalid signature" }, { status: 401 });
-  }
-
   let evt: WahaEvent;
   try {
-    evt = JSON.parse(raw) as WahaEvent;
+    evt = JSON.parse(raw);
+    if (!evt || typeof evt !== "object") throw new Error("invalid event");
   } catch {
     return NextResponse.json({ error: "invalid json" }, { status: 400 });
   }
-
-  // Phase 2 hanya tangani event `message` inbound. session.status di-akui tapi diabaikan.
-  if (evt.event !== "message") {
-    return NextResponse.json({ ok: true, ignored: evt.event ?? "unknown" });
-  }
-
+  if (
+    evt.event !== "message" ||
+    evt.session !== (process.env.WAHA_SESSION_NAME ?? "default")
+  )
+    return NextResponse.json({ ok: true, ignored: true });
   const p = evt.payload ?? {};
-  if (!p.from || p.fromMe === true) {
-    return NextResponse.json({ ok: true, skipped: "non-inbound" });
-  }
-
-  const text = typeof p.body === "string" ? p.body.trim() : "";
-  const hasMedia = p.hasMedia === true;
-  const mediaMime = p.media?.mimetype ?? "";
-  const mediaUrl = p.media?.url ?? "";
-  const isAudio =
-    hasMedia &&
-    (mediaMime.startsWith("audio/") ||
-      p.type === "voice" ||
-      p.type === "ptt" ||
-      p.type === "audio");
-
-  // Non-audio media (gambar/dokumen/video/sticker) → reject halus, tidak invoke agent.
-  if (hasMedia && !isAudio) {
-    console.log(`[wa/webhook] reject non-audio media from=${p.from} mime=${mediaMime} type=${p.type}`);
-    await sendText(p.from, REJECT_MEDIA).catch(() => {});
-    return NextResponse.json({ ok: true, skipped: "media" });
-  }
-
-  let userMessage = text;
-
-  if (isAudio) {
-    const duration = p.media?.duration ?? p._data?.seconds ?? null;
-    if (typeof duration === "number" && duration > MAX_VOICE_SECONDS) {
-      console.log(`[wa/webhook] voice too long ${duration}s from=${p.from}`);
-      await sendText(p.from, VOICE_TOO_LONG).catch(() => {});
-      return NextResponse.json({ ok: true, skipped: "voice-too-long" });
-    }
-    if (!mediaUrl) {
-      console.error(`[wa/webhook] audio without media.url from=${p.from}`);
-      await sendText(p.from, VOICE_FAILED).catch(() => {});
-      return NextResponse.json({ ok: true, skipped: "no-media-url" });
-    }
-    try {
-      const transcript = await transcribeAudio(mediaUrl, mediaMime);
-      userMessage = `[via voice] ${transcript}`;
-      console.log(`[wa/webhook] transcribed ${transcript.length} chars from=${p.from}`);
-    } catch (err) {
-      console.error(`[wa/webhook] transcribe failed for ${p.from}:`, err);
-      await sendText(p.from, VOICE_FAILED).catch(() => {});
-      return NextResponse.json({ ok: true, skipped: "transcribe-failed" });
-    }
-  }
-
-  if (!userMessage) {
-    console.log(`[wa/webhook] skipped empty from=${p.from} type=${p.type ?? "?"}`);
-    return NextResponse.json({ ok: true, skipped: "empty" });
-  }
-
+  // Ignore groups, status feeds and outbound messages.
+  if (
+    typeof p.from !== "string" ||
+    !/^\d+@(c\.us|s\.whatsapp\.net|lid)$/.test(p.from) ||
+    p.fromMe === true
+  )
+    return NextResponse.json({ ok: true, ignored: true });
+  if (typeof p.id !== "string" || !p.id.trim())
+    return NextResponse.json({ error: "message id required" }, { status: 400 });
+  let message = typeof p.body === "string" ? p.body.trim() : "";
   try {
-    const result = await handleWelcomeFlow(p.from, userMessage);
-
-    if (result.readyForAgent && result.token && result.participantId) {
-      let collected = "";
-      let sessionEnded = false;
-      const run = await runTurn({
-        token: result.token,
-        userMessage,
-        channel: "whatsapp",
-        onTextDelta: (t) => {
-          collected += t;
-        },
-        onSessionEnded: () => {
-          sessionEnded = true;
-        },
-      });
-
-      if (!run.ok) {
-        console.error(`[wa/webhook] runTurn failed: ${run.error}`);
-        // Kalau sesi sudah selesai sebelumnya, balas template lock.
-        if (run.error === "sesi sudah selesai" || run.error === "batch sudah ditutup") {
-          await sendChunked(p.from, SESSION_LOCKED).catch(() => {});
-        }
-        return NextResponse.json({ ok: true, agentError: run.error });
-      }
-
-      const reply = collected.trim();
-      if (reply) {
-        await sendChunked(p.from, reply).catch((e) =>
-          console.error(`[wa/webhook] sendChunked error:`, e),
-        );
-      }
-
-      if (sessionEnded) {
-        await supabaseAdmin()
-          .from("participants")
-          .update({
-            wa_status: "completed",
-            session_locked_at: new Date().toISOString(),
-          })
-          .eq("id", result.participantId);
-      }
-
-      return NextResponse.json({ ok: true, agent: "ran", sessionEnded });
+    if (message.length > 8000) {
+      await sendText(
+        p.from,
+        "Pesannya panjang sekali. Boleh kirim versi singkatnya?",
+      );
+      return NextResponse.json({ ok: true });
     }
-
-    return NextResponse.json({
-      ok: true,
-      readyForAgent: result.readyForAgent,
-      participantId: result.participantId,
-    });
-  } catch (err) {
-    console.error("[wa/webhook] flow error:", err);
-    return NextResponse.json({ error: "flow failed" }, { status: 500 });
+    if (p.hasMedia) {
+      const mime = p.media?.mimetype ?? "";
+      const audio =
+        mime.startsWith("audio/") ||
+        ["voice", "ptt", "audio"].includes(p.type ?? "");
+      if (!audio) {
+        await sendText(p.from, REJECT_MEDIA);
+        return NextResponse.json({ ok: true });
+      }
+      if ((p.media?.duration ?? p._data?.seconds ?? 0) > 120) {
+        await sendText(p.from, VOICE_TOO_LONG);
+        return NextResponse.json({ ok: true });
+      }
+      if (!p.media?.url) {
+        await sendText(p.from, VOICE_FAILED);
+        return NextResponse.json({ ok: true });
+      }
+      message = (await transcribeAudio(p.media.url, mime)).slice(0, 8000);
+    }
+    if (message) await runMasLini(p.from, p.id, message);
+    return NextResponse.json({ ok: true });
+  } catch {
+    console.error("[mas-lini] incoming turn failed; webhook should retry");
+    return NextResponse.json({ error: "retry required" }, { status: 503 });
   }
 }
