@@ -11,6 +11,11 @@ export const QUESTIONS = [
   "Topik atau kegiatan lanjutan apa yang Kakak harapkan?",
 ] as const;
 
+export type Notice =
+  | { type: "identity" }
+  | { type: "review" }
+  | { type: "complaint"; text: string };
+
 export type Contact = {
   name: string | null;
   business: string | null;
@@ -21,6 +26,8 @@ export type Contact = {
   feedback_stopped: boolean;
   handed_off: boolean;
   complaints?: string[];
+  // Notifikasi untuk Bang Herri yang belum terkirim.
+  pending_notices?: Notice[];
 };
 export type Understanding = {
   name?: string;
@@ -51,6 +58,10 @@ export function advance(
   message = "",
 ): { contact: Contact; reply: string } {
   const contact = { ...previous, feedback: [...previous.feedback] };
+  const notices: Notice[] = [];
+  const wasFinished =
+    previous.framework_sent &&
+    (previous.feedback_stopped || previous.feedback.every((f) => f !== null));
   if (input.name) contact.name = input.name;
   if (input.business) contact.business = input.business;
   if (!contact.phone && input.phone)
@@ -70,8 +81,10 @@ export function advance(
     contact.feedback_stopped = true;
     // Keluhan dicatat agar pernyataan "sudah kami catat" benar adanya.
     const note = (input.feedback ?? message).trim().slice(0, 1000);
-    if (input.negative && note)
+    if (input.negative && note) {
       contact.complaints = [...(contact.complaints ?? []), note].slice(-20);
+      notices.push({ type: "complaint", text: note });
+    }
     const link = input.request_framework
       ? `Berikut link framework Creative Talk${name}: ${FRAMEWORK}\n\n`
       : "";
@@ -91,6 +104,7 @@ export function advance(
   } else if (!contact.framework_sent) {
     contact.framework_sent = true;
     contact.feedback_stopped = !!input.decline_feedback;
+    notices.push({ type: "identity" });
     reply =
       `Ini framework Creative Talk-nya${name}: ${FRAMEWORK}\n\n` +
       (contact.feedback_stopped
@@ -102,6 +116,8 @@ export function advance(
     if (!contact.feedback_stopped && input.feedback && index >= 0)
       contact.feedback[index] = input.feedback;
     const next = contact.feedback.findIndex((f) => f === null);
+    if (!wasFinished && (contact.feedback_stopped || next < 0))
+      notices.push({ type: "review" });
     const link = input.request_framework
       ? `Ini link framework-nya${name}: ${FRAMEWORK}\n\n`
       : "";
@@ -111,5 +127,10 @@ export function advance(
         ? `Terima kasih${name}! Semoga framework-nya bermanfaat. Jika membutuhkan bantuan lebih lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
         : `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]} Kakak boleh melewati pertanyaan atau berhenti kapan saja.`);
   }
+  if (notices.length)
+    contact.pending_notices = [
+      ...(previous.pending_notices ?? []),
+      ...notices,
+    ].slice(-10);
   return { contact, reply: intro + reply };
 }

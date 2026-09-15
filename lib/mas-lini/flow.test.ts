@@ -105,6 +105,55 @@ describe("Mas Lini", () => {
     expect(neutral.reply).toContain("08112268556");
     expect(neutral.contact.complaints).toHaveLength(2);
   });
+  it("antrean notifikasi: identitas, review selesai sekali, dan keluhan", () => {
+    let result = advance(initialContact("628123456789@c.us"), {
+      name: "Ayu",
+      business: "Kue",
+    });
+    expect(result.contact.pending_notices).toEqual([{ type: "identity" }]);
+    for (const feedback of ["Bagus", "Contohnya", "Sudah jelas", "Praktik AI"])
+      result = advance(result.contact, { feedback });
+    expect(result.contact.pending_notices).toEqual([
+      { type: "identity" },
+      { type: "review" },
+    ]);
+    result = advance(
+      { ...result.contact, pending_notices: [] },
+      { feedback: "lagi" },
+    );
+    expect(result.contact.pending_notices).toEqual([]);
+    const complaint = advance(
+      result.contact,
+      { negative: true },
+      "Kurang jelas",
+    );
+    expect(complaint.contact.pending_notices).toEqual([
+      { type: "complaint", text: "Kurang jelas" },
+    ]);
+  });
+  it("menolak feedback saat framework dikirim hanya memicu notifikasi identitas", () => {
+    const result = advance(initialContact("628123456789@c.us"), {
+      name: "Ayu",
+      business: "Kue",
+      decline_feedback: true,
+    });
+    expect(result.contact.pending_notices).toEqual([{ type: "identity" }]);
+    expect(advance(result.contact, {}).contact.pending_notices).toEqual([
+      { type: "identity" },
+    ]);
+  });
+  it("berhenti di tengah feedback memicu notifikasi review", () => {
+    let result = advance(initialContact("628123456789@c.us"), {
+      name: "Ayu",
+      business: "Kue",
+    });
+    result = advance(
+      { ...result.contact, pending_notices: [] },
+      { feedback: "Bagus" },
+    );
+    result = advance(result.contact, { decline_feedback: true });
+    expect(result.contact.pending_notices).toEqual([{ type: "review" }]);
+  });
   it("menolak output model rusak dan tidak menerima status dari model", () => {
     expect(() => parseUnderstanding('{"negative":"false"}')).toThrow();
     expect(() => parseUnderstanding("[]")).toThrow();

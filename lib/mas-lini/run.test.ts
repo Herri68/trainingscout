@@ -1,4 +1,4 @@
-import { beforeEach, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { initialContact } from "./flow";
 const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
   sendText: vi.fn(),
   lookupPhoneByLid: vi.fn(),
   understand: vi.fn(),
+  buildNotice: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   supabaseAdmin: () => ({ rpc: mocks.rpc, from: mocks.from }),
@@ -15,6 +16,7 @@ vi.mock("@/lib/wa/client", () => ({
   lookupPhoneByLid: mocks.lookupPhoneByLid,
 }));
 vi.mock("./understand", () => ({ understand: mocks.understand }));
+vi.mock("./notify", () => ({ buildNotice: mocks.buildNotice }));
 import { runMasLini } from "./run";
 const jid = "628123456789@c.us";
 beforeEach(() => {
@@ -138,4 +140,59 @@ it("kontak @lid memakai nomor dari WAHA sehingga tidak ditanya nomor HP", async 
     lid,
     expect.stringContaining("nomor HP"),
   );
+});
+
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+function freshQuery() {
+  return {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    update: vi.fn().mockReturnThis(),
+    then: (resolve: (value: unknown) => unknown) =>
+      Promise.resolve({ data: null, error: null }).then(resolve),
+  };
+}
+
+it("notifikasi kontak baru ke Bang Herri dikirim setelah balasan peserta lalu antrean dikosongkan", async () => {
+  vi.stubEnv("TRAINER_WA_JID", "628112268556@c.us");
+  const query = freshQuery();
+  mocks.from.mockReturnValue(query);
+  mocks.understand.mockResolvedValue({ name: "Ayu", business: "Toko kue" });
+  mocks.buildNotice.mockResolvedValue("NOTIF");
+  await runMasLini(jid, "m1", "Saya Ayu, punya toko kue");
+  expect(mocks.sendText).toHaveBeenNthCalledWith(
+    1,
+    jid,
+    expect.stringContaining("drive.google.com"),
+  );
+  expect(mocks.sendText).toHaveBeenNthCalledWith(
+    2,
+    "628112268556@c.us",
+    "NOTIF",
+  );
+  expect(mocks.buildNotice).toHaveBeenCalledWith(
+    { type: "identity" },
+    expect.objectContaining({ name: "Ayu", phone: "628123456789" }),
+    jid,
+  );
+  expect(query.update).toHaveBeenLastCalledWith({
+    state: expect.objectContaining({ pending_notices: [] }),
+  });
+});
+
+it("notifikasi gagal tidak menggagalkan balasan peserta dan tetap tertunda", async () => {
+  vi.stubEnv("TRAINER_WA_JID", "628112268556@c.us");
+  const query = freshQuery();
+  mocks.from.mockReturnValue(query);
+  mocks.understand.mockResolvedValue({ name: "Ayu", business: "Toko kue" });
+  mocks.buildNotice.mockResolvedValue("NOTIF");
+  mocks.sendText
+    .mockResolvedValueOnce(undefined)
+    .mockRejectedValueOnce(new Error("WAHA down"));
+  await expect(runMasLini(jid, "m1", "Saya Ayu")).resolves.toBeUndefined();
+  expect(query.update).not.toHaveBeenCalledWith({ state: expect.anything() });
 });

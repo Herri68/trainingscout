@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
 import { lookupPhoneByLid, sendText } from "@/lib/wa/client";
 import { advance, Contact, initialContact } from "./flow";
+import { buildNotice } from "./notify";
 import { understand } from "./understand";
 
 export async function runMasLini(
@@ -26,7 +27,11 @@ export async function runMasLini(
       .eq("message_id", messageId)
       .maybeSingle();
     if (cached.error) throw new Error("Reply storage unavailable");
-    if (cached.data?.delivered) return;
+    let state = claimed.data as Contact;
+    if (cached.data?.delivered) {
+      await flushNotices(db, jid, lease, state);
+      return;
+    }
     let reply: string;
     if (cached.data) {
       reply = cached.data.reply;
@@ -40,7 +45,7 @@ export async function runMasLini(
         .limit(1);
       if (pending.error || pending.data?.length)
         throw new Error("Previous reply pending; retry");
-      const contact = claimed.data as Contact;
+      const contact = state;
       // Privacy ID (@lid) is not a phone number; resolve it before asking the user.
       if (!contact.phone && jid.endsWith("@lid"))
         contact.phone = await lookupPhoneByLid(jid);
@@ -54,6 +59,7 @@ export async function runMasLini(
       });
       if (saved.error) throw new Error("Contact update failed");
       reply = result.reply;
+      state = result.contact;
     }
     // One bubble: do not swallow send failures or truncate the framework URL.
     await sendText(jid, reply);
@@ -63,8 +69,38 @@ export async function runMasLini(
       .eq("jid", jid)
       .eq("message_id", messageId);
     if (delivered.error) throw new Error("Delivery receipt update failed");
+    await flushNotices(db, jid, lease, state);
   } finally {
     const released = await db.rpc("cs_release", { p_jid: jid, p_lease: lease });
     if (released.error) console.error("[mas-lini] lease release failed");
   }
+}
+
+// Notifikasi ke Bang Herri dikirim setelah balasan peserta terkirim. Kegagalan tidak
+// menggagalkan giliran peserta: sisa antrean tetap tersimpan dan dicoba pada pesan berikutnya.
+async function flushNotices(
+  db: ReturnType<typeof supabaseAdmin>,
+  jid: string,
+  lease: string,
+  state: Contact,
+): Promise<void> {
+  const trainer = process.env.TRAINER_WA_JID;
+  const pending = state.pending_notices ?? [];
+  if (!trainer || !pending.length) return;
+  let sent = 0;
+  try {
+    for (const notice of pending) {
+      await sendText(trainer, await buildNotice(notice, state, jid));
+      sent++;
+    }
+  } catch (err) {
+    console.error("[mas-lini] trainer notice failed:", err);
+  }
+  if (!sent) return;
+  const saved = await db
+    .from("cs_contacts")
+    .update({ state: { ...state, pending_notices: pending.slice(sent) } })
+    .eq("jid", jid)
+    .eq("lease", lease);
+  if (saved.error) console.error("[mas-lini] notice queue update failed");
 }
