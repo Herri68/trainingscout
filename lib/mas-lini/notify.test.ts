@@ -57,6 +57,19 @@ describe("notifikasi Bang Herri", () => {
     expect(text).toContain("1. Kesan: Inspiratif");
   });
 
+  it("minat topik tambahan dikirim singkat tanpa ringkasan AI", async () => {
+    const summarize = vi.fn();
+    const text = await buildNotice(
+      { type: "interest", text: "Digital marketing" },
+      reviewed(),
+      jid,
+      summarize,
+    );
+    expect(text).toContain("Minat topik tambahan");
+    expect(text).toContain("Digital marketing");
+    expect(text).toContain("Nama: Ridwan");
+    expect(summarize).not.toHaveBeenCalled();
+  });
   it("keluhan diberi penanda dan menyebut ID bila nomor belum diketahui", async () => {
     const lid = "168812345678901@lid";
     const text = await buildNotice(

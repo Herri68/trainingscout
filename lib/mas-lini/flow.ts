@@ -17,7 +17,8 @@ export type Turn = { role: "user" | "assistant"; text: string };
 export type Notice =
   | { type: "identity" }
   | { type: "review" }
-  | { type: "complaint"; text: string };
+  | { type: "complaint"; text: string }
+  | { type: "interest"; text: string };
 
 export type Contact = {
   name: string | null;
@@ -38,6 +39,8 @@ export type Contact = {
   // Penutup (kontak Bang Herri) dan penjelasan di luar topik cukup sekali.
   closing_sent?: boolean;
   off_topic_noted?: boolean;
+  // Minat belajar/topik tambahan yang disampaikan setelah feedback selesai.
+  interests?: string[];
 };
 export type Understanding = {
   name?: string;
@@ -48,6 +51,7 @@ export type Understanding = {
   feedback?: string;
   request_framework?: boolean;
   off_topic?: boolean;
+  learning_interest?: string;
 };
 export function initialContact(jid: string): Contact {
   const match = jid.match(/^([1-9]\d{7,14})@(c\.us|s\.whatsapp\.net)$/);
@@ -67,12 +71,48 @@ export function advance(
   previous: Contact,
   input: Understanding,
   message = "",
-): { contact: Contact; reply: string } {
+): { contact: Contact; reply: string; recorded?: string } {
   const contact = { ...previous, feedback: [...previous.feedback] };
   const notices: Notice[] = [];
   const wasFinished =
     previous.framework_sent &&
     (previous.feedback_stopped || previous.feedback.every((f) => f !== null));
+  // Pertanyaan harapan topik lanjutan: topik apa pun yang disebut adalah jawaban,
+  // walaupun terbaca "di luar topik" (misalnya digital marketing atau sosmed).
+  const activeIndex =
+    previous.framework_sent &&
+    !previous.feedback_stopped &&
+    !previous.handed_off
+      ? previous.feedback.findIndex((f) => f === null)
+      : -1;
+  // Model kadang menandai "[dilewati]" padahal peserta menyebut topik; topiknya yang dicatat.
+  if (
+    activeIndex === QUESTIONS.length - 1 &&
+    (!input.feedback || input.feedback === "[dilewati]") &&
+    !input.negative &&
+    !input.decline_feedback
+  ) {
+    const answer =
+      input.learning_interest ??
+      (input.off_topic ? message.trim().slice(0, 1000) : "");
+    if (answer) input = { ...input, feedback: answer, off_topic: false };
+  }
+  let recorded: string | undefined;
+  // Minat belajar setelah feedback selesai tetap dicatat dan dikabarkan, bukan ditolak.
+  const interest = input.learning_interest?.trim();
+  const interestNoted =
+    wasFinished && !previous.handed_off && !input.negative && !!interest;
+  if (interestNoted && interest) {
+    const known = (contact.interests ?? []).some(
+      (item) => item.toLowerCase() === interest.toLowerCase(),
+    );
+    if (!known) {
+      contact.interests = [...(contact.interests ?? []), interest].slice(-20);
+      notices.push({ type: "interest", text: interest });
+    }
+    recorded = interest;
+    input = { ...input, off_topic: false };
+  }
   if (input.name) contact.name = input.name;
   if (input.business) contact.business = input.business;
   if (!contact.phone && input.phone)
@@ -145,8 +185,10 @@ export function advance(
   } else {
     if (input.decline_feedback) contact.feedback_stopped = true;
     const index = contact.feedback.findIndex((f) => f === null);
-    if (!contact.feedback_stopped && input.feedback && index >= 0)
+    if (!contact.feedback_stopped && input.feedback && index >= 0) {
       contact.feedback[index] = input.feedback;
+      recorded = input.feedback;
+    }
     const next = contact.feedback.findIndex((f) => f === null);
     if (!wasFinished && (contact.feedback_stopped || next < 0))
       notices.push({ type: "review" });
@@ -173,9 +215,11 @@ export function advance(
         ? `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]}${skipHint}`
         : !closingKnown
           ? `Terima kasih${name}! Semoga framework-nya bermanfaat. Jika membutuhkan bantuan lebih lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
-          : link
-            ? ""
-            : `Baik${name}.`)
+          : interestNoted
+            ? `Terima kasih${name}, masukan topik tersebut sudah kami catat untuk kegiatan berikutnya.`
+            : link
+              ? ""
+              : `Baik${name}.`)
     ).trimEnd();
   }
   if (notices.length)
@@ -183,5 +227,5 @@ export function advance(
       ...(previous.pending_notices ?? []),
       ...notices,
     ].slice(-10);
-  return { contact, reply: intro + reply };
+  return { contact, reply: intro + reply, recorded };
 }

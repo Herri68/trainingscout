@@ -60,7 +60,7 @@ export async function runMasLini(
           message: text,
           draft: result.reply,
           history: contact.history ?? [],
-          recordedAnswer: understanding.feedback,
+          recordedAnswer: result.recorded,
         });
       result.contact.history = [
         ...(contact.history ?? []),

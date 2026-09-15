@@ -72,6 +72,14 @@ export async function buildNotice(
         : "Framework Creative Talk sudah dikirim. Menunggu review peserta.",
     ].join("\n");
 
+  if (notice.type === "interest")
+    return [
+      "💡 *Minat topik tambahan*",
+      ...who,
+      "",
+      `Ingin belajar/berharap dibahas: "${notice.text}"`,
+    ].join("\n");
+
   const summary = await summarize(contact).catch((err) => {
     console.error("[mas-lini] review summary failed:", err);
     return null;

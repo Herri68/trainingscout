@@ -216,6 +216,66 @@ describe("Mas Lini", () => {
     );
     expect(legacy.reply).not.toContain("08112268556");
   });
+  it("jawaban pertanyaan harapan lanjutan selalu dicatat meski terbaca di luar topik", () => {
+    let result = advance(initialContact("628123456789@c.us"), {
+      name: "Rinto",
+      business: "Bengkel",
+    });
+    for (const feedback of ["Seru", "Bahas mitra", "Semua ok"])
+      result = advance(result.contact, { feedback });
+    const offTopic = advance(
+      result.contact,
+      { off_topic: true },
+      "saya punya masalah digital marketing",
+    );
+    expect(offTopic.contact.feedback[3]).toBe(
+      "saya punya masalah digital marketing",
+    );
+    expect(offTopic.recorded).toBe("saya punya masalah digital marketing");
+    expect(offTopic.reply).toContain("08112268556");
+    expect(offTopic.contact.off_topic_noted).toBeFalsy();
+    const interest = advance(
+      result.contact,
+      { learning_interest: "Sosmed" },
+      "kalau sosmed",
+    );
+    expect(interest.contact.feedback[3]).toBe("Sosmed");
+    const skippedButTopic = advance(
+      result.contact,
+      { feedback: "[dilewati]", learning_interest: "Digital marketing" },
+      "saya punya masalah digital marketing",
+    );
+    expect(skippedButTopic.contact.feedback[3]).toBe("Digital marketing");
+    expect(skippedButTopic.recorded).toBe("Digital marketing");
+  });
+  it("minat belajar setelah feedback selesai dicatat dan dikabarkan, bukan ditolak", () => {
+    let result = advance(initialContact("628123456789@c.us"), {
+      name: "Rinto",
+      business: "Bengkel",
+    });
+    for (const feedback of ["Seru", "Bahas mitra", "Semua ok", "AI coding"])
+      result = advance(result.contact, { feedback });
+    const more = advance(
+      { ...result.contact, pending_notices: [] },
+      { learning_interest: "Digital marketing", off_topic: true },
+      "saya punya masalah digital marketing",
+    );
+    expect(more.contact.interests).toEqual(["Digital marketing"]);
+    expect(more.contact.pending_notices).toEqual([
+      { type: "interest", text: "Digital marketing" },
+    ]);
+    expect(more.reply).toContain("sudah kami catat");
+    expect(more.reply).not.toContain("08112268556");
+    expect(more.recorded).toBe("Digital marketing");
+    expect(more.contact.off_topic_noted).toBeFalsy();
+    const again = advance(
+      { ...more.contact, pending_notices: [] },
+      { learning_interest: "digital marketing" },
+      "digital marketing lagi ya",
+    );
+    expect(again.contact.interests).toEqual(["Digital marketing"]);
+    expect(again.contact.pending_notices).toEqual([]);
+  });
   it("menolak output model rusak dan tidak menerima status dari model", () => {
     expect(() => parseUnderstanding('{"negative":"false"}')).toThrow();
     expect(() => parseUnderstanding("[]")).toThrow();
