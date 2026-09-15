@@ -14,7 +14,7 @@ describe("Mas Lini", () => {
   });
   it("mengenali kontak bertahap dan mempertahankan nama saat chat berikutnya", () => {
     let result = advance(initialContact("628123456789@c.us"), {});
-    expect(result.reply).toContain("Boleh tahu namanya");
+    expect(result.reply).toContain("Boleh tahu nama Kakak");
     expect(result.reply).toContain("disimpan");
     result = advance(result.contact, { name: "Dina" });
     expect(result.reply).toContain("Dina");
@@ -22,6 +22,18 @@ describe("Mas Lini", () => {
     result = advance(result.contact, { business: "Belum punya bisnis" });
     expect(result.reply).toContain(FRAMEWORK);
     expect(result.contact.name).toBe("Dina");
+  });
+  it("menyapa dengan Kak tanpa dobel sapaan", () => {
+    const result = advance(initialContact("123456789012345@lid"), {
+      name: "Ridwan",
+      business: "Resto",
+    });
+    expect(result.reply).toContain("Kak Ridwan");
+    expect(result.reply).not.toMatch(/\bkamu\b/i);
+    expect(
+      advance(initialContact("628123456789@c.us"), { name: "Kak Ridwan" })
+        .reply,
+    ).not.toContain("Kak Kak");
   });
   it("tidak menganggap LID sebagai nomor HP", () => {
     const first = advance(initialContact("123456789012345@lid"), {
@@ -44,7 +56,7 @@ describe("Mas Lini", () => {
     expect(result.contact.feedback.filter(Boolean)).toHaveLength(4);
     result = advance(result.contact, { request_framework: true });
     expect(result.reply).toContain(FRAMEWORK);
-    expect(result.reply).not.toContain("kesan kamu");
+    expect(result.reply).not.toContain("kesan Kakak");
   });
   it("penolakan feedback tetap mendapat framework dan menghentikan pertanyaan", () => {
     const result = advance(initialContact("628123456789@c.us"), {

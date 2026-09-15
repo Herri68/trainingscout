@@ -5,10 +5,10 @@ export const FRAMEWORK =
 export const HANDOFF =
   "Silakan hubungi Bang Herri langsung di 08112268556: https://wa.me/628112268556";
 export const QUESTIONS = [
-  "Bagaimana kesan kamu setelah mengikuti Creative Talk?",
-  "Bagian mana yang paling menarik atau bermanfaat buat kamu?",
+  "Bagaimana kesan Kakak setelah mengikuti Creative Talk?",
+  "Bagian mana yang paling menarik atau bermanfaat buat Kakak?",
   "Adakah bagian yang kurang jelas atau perlu diperbaiki?",
-  "Topik atau kegiatan lanjutan apa yang kamu harapkan?",
+  "Topik atau kegiatan lanjutan apa yang Kakak harapkan?",
 ] as const;
 
 export type Contact = {
@@ -54,21 +54,24 @@ export function advance(
   if (!contact.phone && input.phone)
     contact.phone = normalizePhoneToJid(input.phone)?.split("@")[0] ?? null;
   const intro = !contact.welcomed
-    ? "Halo! Saya Mas Lini, asisten AI Bang Herri. Nama, nomor WhatsApp, dan bisnis kamu akan disimpan untuk membantu percakapan ini. "
+    ? "Halo Kak! Saya Mas Lini, asisten AI Bang Herri. Nama, nomor WhatsApp, dan bisnis Kakak akan disimpan untuk membantu percakapan ini. "
     : "";
   contact.welcomed = true;
-  const name = contact.name ? `, ${contact.name}` : "";
+  // Sapa dengan "Kak"; hindari "Kak Kak" bila nama sudah diawali sapaan.
+  const name = contact.name
+    ? `, Kak ${contact.name.replace(/^kak(ak)?\.?\s+/i, "")}`
+    : "";
   let reply: string;
   if (input.negative || contact.handed_off) {
     contact.handed_off = true;
     contact.feedback_stopped = true;
     reply = `Terima kasih sudah menyampaikan${name}. Maaf kalau pengalamannya kurang berkenan. ${HANDOFF}`;
   } else if (!contact.name) {
-    reply = "Boleh tahu namanya?";
+    reply = "Boleh tahu nama Kakak?";
   } else if (!contact.business) {
-    reply = `Salam kenal${name}! Bisnis atau kegiatan kamu bergerak di bidang apa?`;
+    reply = `Salam kenal${name}! Bisnis atau kegiatan Kakak bergerak di bidang apa?`;
   } else if (!contact.phone) {
-    reply = `Terima kasih${name}. Nomor HP kamu belum terbaca dari WhatsApp. Boleh tuliskan nomor HP dengan awalan 08 atau +62?`;
+    reply = `Terima kasih${name}. Nomor HP Kakak belum terbaca dari WhatsApp. Boleh tuliskan nomor HP dengan awalan 08 atau +62?`;
   } else if (!contact.framework_sent) {
     contact.framework_sent = true;
     contact.feedback_stopped = !!input.decline_feedback;
@@ -90,7 +93,7 @@ export function advance(
       link +
       (contact.feedback_stopped || next < 0
         ? `Terima kasih${name}! Semoga framework-nya bermanfaat. Kalau butuh bantuan lanjutan, ${HANDOFF}`
-        : `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]} Kamu boleh melewati pertanyaan atau berhenti kapan saja.`);
+        : `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]} Kakak boleh melewati pertanyaan atau berhenti kapan saja.`);
   }
   return { contact, reply: intro + reply };
 }

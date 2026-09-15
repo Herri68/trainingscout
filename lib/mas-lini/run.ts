@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { supabaseAdmin } from "@/lib/supabase/admin";
-import { sendText } from "@/lib/wa/client";
+import { lookupPhoneByLid, sendText } from "@/lib/wa/client";
 import { advance, Contact, initialContact } from "./flow";
 import { understand } from "./understand";
 
@@ -41,6 +41,9 @@ export async function runMasLini(
       if (pending.error || pending.data?.length)
         throw new Error("Previous reply pending; retry");
       const contact = claimed.data as Contact;
+      // Privacy ID (@lid) is not a phone number; resolve it before asking the user.
+      if (!contact.phone && jid.endsWith("@lid"))
+        contact.phone = await lookupPhoneByLid(jid);
       const result = advance(contact, await understand(contact, text));
       const saved = await db.rpc("cs_prepare", {
         p_jid: jid,

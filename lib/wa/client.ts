@@ -21,7 +21,9 @@ export async function sendText(jid: string, text: string): Promise<void> {
   const chatId = jid;
   const url = `${baseUrl()}/api/sendText`;
   const body = JSON.stringify({ session: SESSION, chatId, text });
-  console.log(`[waha] sendText -> ${chatId} (session=${SESSION}, len=${text.length})`);
+  console.log(
+    `[waha] sendText -> ${chatId} (session=${SESSION}, len=${text.length})`,
+  );
   let res: Response;
   try {
     res = await fetch(url, {
@@ -61,7 +63,10 @@ export async function stopTyping(jid: string): Promise<void> {
  * Kirim balasan agent ke WA dengan auto-split per paragraf + typing indicator.
  * Split by \n\n, max 4 chunk. Untuk tiap chunk: startTyping → sleep proporsional → sendText → sleep 400ms.
  */
-export async function sendChunked(jid: string, fullText: string): Promise<void> {
+export async function sendChunked(
+  jid: string,
+  fullText: string,
+): Promise<void> {
   const trimmed = fullText.trim();
   if (!trimmed) return;
   const parts = trimmed
@@ -96,6 +101,24 @@ export async function getSessionStatus(): Promise<{ status: string } | null> {
     if (!res.ok) return null;
     return (await res.json()) as { status: string };
   } catch {
+    return null;
+  }
+}
+
+// WhatsApp privacy ID (`...@lid`) bukan nomor HP. WAHA menyimpan pemetaan LID → nomor
+// (GET /api/{session}/lids/{lid}). Return digit nomor, atau null bila tidak diketahui.
+export async function lookupPhoneByLid(jid: string): Promise<string | null> {
+  if (!jid.endsWith("@lid")) return null;
+  try {
+    const res = await fetch(
+      `${baseUrl()}/api/${SESSION}/lids/${encodeURIComponent(jid)}`,
+      { headers: headers(), signal: AbortSignal.timeout(5000) },
+    );
+    if (!res.ok) return null;
+    const { pn } = (await res.json()) as { pn?: string | null };
+    return pn?.match(/^([1-9]\d{7,14})@(c\.us|s\.whatsapp\.net)$/)?.[1] ?? null;
+  } catch (err) {
+    console.error("[waha] lid lookup failed:", err);
     return null;
   }
 }

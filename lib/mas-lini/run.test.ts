@@ -4,12 +4,16 @@ const mocks = vi.hoisted(() => ({
   rpc: vi.fn(),
   from: vi.fn(),
   sendText: vi.fn(),
+  lookupPhoneByLid: vi.fn(),
   understand: vi.fn(),
 }));
 vi.mock("@/lib/supabase/admin", () => ({
   supabaseAdmin: () => ({ rpc: mocks.rpc, from: mocks.from }),
 }));
-vi.mock("@/lib/wa/client", () => ({ sendText: mocks.sendText }));
+vi.mock("@/lib/wa/client", () => ({
+  sendText: mocks.sendText,
+  lookupPhoneByLid: mocks.lookupPhoneByLid,
+}));
 vi.mock("./understand", () => ({ understand: mocks.understand }));
 import { runMasLini } from "./run";
 const jid = "628123456789@c.us";
@@ -86,5 +90,52 @@ it("menyimpan nama, nomor dan bisnis sebelum mengirim framework", async () => {
   );
   expect(mocks.rpc.mock.invocationCallOrder[1]).toBeLessThan(
     mocks.sendText.mock.invocationCallOrder[0],
+  );
+});
+
+it("kontak @lid memakai nomor dari WAHA sehingga tidak ditanya nomor HP", async () => {
+  const lid = "168812345678901@lid";
+  mocks.rpc.mockImplementation(async (name) => ({
+    data:
+      name === "cs_claim"
+        ? {
+            ...initialContact(lid),
+            welcomed: true,
+            name: "Ridwan",
+            business: "Resto",
+          }
+        : null,
+    error: null,
+  }));
+  const query = {
+    select: vi.fn().mockReturnThis(),
+    eq: vi.fn().mockReturnThis(),
+    maybeSingle: vi.fn().mockResolvedValue({ data: null, error: null }),
+    limit: vi.fn().mockResolvedValue({ data: [], error: null }),
+    update: vi.fn().mockReturnThis(),
+    then: (resolve: (value: unknown) => unknown) =>
+      Promise.resolve({ data: null, error: null }).then(resolve),
+  };
+  mocks.from.mockReturnValue(query);
+  mocks.understand.mockResolvedValue({});
+  mocks.lookupPhoneByLid.mockResolvedValue("6281234567890");
+  await runMasLini(lid, "m3", "Pagi");
+  expect(mocks.lookupPhoneByLid).toHaveBeenCalledWith(lid);
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    "cs_prepare",
+    expect.objectContaining({
+      p_state: expect.objectContaining({
+        phone: "6281234567890",
+        framework_sent: true,
+      }),
+    }),
+  );
+  expect(mocks.sendText).toHaveBeenCalledWith(
+    lid,
+    expect.stringContaining("drive.google.com"),
+  );
+  expect(mocks.sendText).not.toHaveBeenCalledWith(
+    lid,
+    expect.stringContaining("nomor HP"),
   );
 });
