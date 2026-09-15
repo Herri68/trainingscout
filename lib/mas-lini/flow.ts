@@ -3,7 +3,8 @@ import { normalizePhoneToJid } from "@/lib/wa/phone";
 export const FRAMEWORK =
   "https://drive.google.com/drive/folders/1kT-1D_MYwIgcYF4ve7LYb4-SbVNwZP7y?usp=sharing";
 // Tanpa link wa.me: WhatsApp menampilkannya sebagai kartu "Share on WhatsApp".
-export const HANDOFF_CONTACT = "Bang Herri melalui WhatsApp di 08112268556";
+const HANDOFF_NUMBER = "08112268556";
+export const HANDOFF_CONTACT = `Bang Herri melalui WhatsApp di ${HANDOFF_NUMBER}`;
 export const QUESTIONS = [
   "Bagaimana kesan Kakak setelah mengikuti Creative Talk?",
   "Bagian mana yang paling menarik atau bermanfaat buat Kakak?",
@@ -34,6 +35,9 @@ export type Contact = {
   history?: Turn[];
   // Info boleh melewati/berhenti cukup disampaikan sekali.
   skip_hint_given?: boolean;
+  // Penutup (kontak Bang Herri) dan penjelasan di luar topik cukup sekali.
+  closing_sent?: boolean;
+  off_topic_noted?: boolean;
 };
 export type Understanding = {
   name?: string;
@@ -43,6 +47,7 @@ export type Understanding = {
   decline_feedback?: boolean;
   feedback?: string;
   request_framework?: boolean;
+  off_topic?: boolean;
 };
 export function initialContact(jid: string): Contact {
   const match = jid.match(/^([1-9]\d{7,14})@(c\.us|s\.whatsapp\.net)$/);
@@ -80,6 +85,27 @@ export function advance(
   const name = contact.name
     ? `, Kak ${contact.name.replace(/^kak(ak)?\.?\s+/i, "")}`
     : "";
+  // Pesan di luar materi: dijelaskan sekali, selanjutnya tidak dibalas (reply kosong).
+  const onlyOffTopic =
+    input.off_topic &&
+    previous.welcomed &&
+    !input.negative &&
+    !input.name &&
+    !input.business &&
+    !input.phone &&
+    !input.feedback &&
+    !input.decline_feedback &&
+    !input.request_framework;
+  if (onlyOffTopic) {
+    const firstNotice = !contact.off_topic_noted;
+    contact.off_topic_noted = true;
+    return {
+      contact,
+      reply: firstNotice
+        ? `Mohon maaf${name || ", Kak"}, Mas Lini hanya dapat membantu seputar Creative Talk dan framework-nya.`
+        : "",
+    };
+  }
   let reply: string;
   if (input.negative || contact.handed_off) {
     const firstEscalation = !contact.handed_off;
@@ -99,8 +125,8 @@ export function advance(
       (firstEscalation
         ? `Terima kasih atas masukannya${name}. Kami mohon maaf karena pengalaman Kakak di Creative Talk belum sesuai harapan.\n\nMasukan Kakak sudah kami catat sebagai bahan evaluasi. Untuk pembahasan lebih lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
         : input.negative
-          ? `Terima kasih${name}, tambahan masukan Kakak sudah kami catat. Untuk tindak lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
-          : `Terima kasih${name}. Untuk tindak lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`);
+          ? `Terima kasih${name}, tambahan masukan Kakak sudah kami catat.`
+          : `Baik${name}.`);
   } else if (!contact.name) {
     reply = "Boleh tahu nama Kakak?";
   } else if (!contact.business) {
@@ -133,11 +159,24 @@ export function advance(
     const link = input.request_framework
       ? `Ini link framework-nya${name}: ${FRAMEWORK}\n\n`
       : "";
-    reply =
+    const finished = contact.feedback_stopped || next < 0;
+    // Penutup dengan kontak Bang Herri cukup sekali (kontak lama dicek lewat riwayat).
+    const closingKnown =
+      contact.closing_sent ||
+      (contact.history ?? []).some(
+        (t) => t.role === "assistant" && t.text.includes(HANDOFF_NUMBER),
+      );
+    if (finished) contact.closing_sent = true;
+    reply = (
       link +
-      (contact.feedback_stopped || next < 0
-        ? `Terima kasih${name}! Semoga framework-nya bermanfaat. Jika membutuhkan bantuan lebih lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
-        : `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]}${skipHint}`);
+      (!finished
+        ? `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]}${skipHint}`
+        : !closingKnown
+          ? `Terima kasih${name}! Semoga framework-nya bermanfaat. Jika membutuhkan bantuan lebih lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
+          : link
+            ? ""
+            : `Baik${name}.`)
+    ).trimEnd();
   }
   if (notices.length)
     contact.pending_notices = [

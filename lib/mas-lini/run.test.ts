@@ -256,3 +256,38 @@ it("jawaban feedback yang tercatat diteruskan ke penulis agar tidak ditolak seba
     }),
   );
 });
+
+it("pesan di luar materi yang sudah pernah dijelaskan tidak dibalas tetapi tetap tercatat", async () => {
+  mocks.rpc.mockImplementation(async (name) => ({
+    data:
+      name === "cs_claim"
+        ? {
+            ...initialContact(jid),
+            welcomed: true,
+            name: "Rinto",
+            business: "Bengkel motor",
+            framework_sent: true,
+            feedback: ["Seru", "Mitra", "Ok", "AI coding"],
+            closing_sent: true,
+            off_topic_noted: true,
+          }
+        : null,
+    error: null,
+  }));
+  const query = freshQuery();
+  mocks.from.mockReturnValue(query);
+  mocks.understand.mockResolvedValue({ off_topic: true });
+  await runMasLini(jid, "m11", "kalau sosmed");
+  expect(mocks.composeReply).not.toHaveBeenCalled();
+  expect(mocks.sendText).not.toHaveBeenCalled();
+  expect(mocks.rpc).toHaveBeenCalledWith(
+    "cs_prepare",
+    expect.objectContaining({
+      p_reply: "",
+      p_state: expect.objectContaining({
+        history: [{ role: "user", text: "kalau sosmed" }],
+      }),
+    }),
+  );
+  expect(query.update).toHaveBeenCalledWith({ delivered: true });
+});

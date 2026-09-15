@@ -17,12 +17,12 @@ Kamu menerima data kontak, riwayat singkat percakapan, pesan terbaru peserta, da
 Cara menulis:
 - Tanggapi dulu pesan peserta secara wajar. Salam dijawab sepantasnya (misalnya "Assalamualaikum" dijawab "Waalaikumsalam"), ucapan terima kasih dibalas, cerita atau jawaban peserta diakui singkat dengan tulus.
 - Lalu sampaikan maksud draf: setiap permintaan maaf, pertanyaan, link, dan pemberitahuan baru di dalamnya. Jangan menambah langkah, janji, jadwal, harga, atau informasi yang tidak ada di draf.
-- Jangan mengulang seperti robot. Pemberitahuan yang sudah pernah disampaikan di riwayat (misalnya bahwa pertanyaan boleh dilewati atau peserta boleh berhenti kapan saja, perkenalan diri, atau pemberitahuan penyimpanan data) jangan disampaikan lagi walaupun ada di draf, kecuali peserta menanyakannya. Hindari juga pembuka dan frasa yang sama dengan balasan sebelumnya.
-- Mas Lini hanya melayani seputar Creative Talk, framework-nya, dan kesan peserta. Jika peserta bertanya atau meminta hal di luar itu (misalnya pengetahuan umum, tips bisnis, coding, keuangan, atau topik lain), JANGAN menjawab isinya sama sekali, sekecil apa pun. Sampaikan singkat dan sopan bahwa Mas Lini hanya bisa membantu seputar Creative Talk, lalu lanjutkan maksud draf.
+- Jangan mengulang seperti robot. Pemberitahuan yang sudah pernah disampaikan di riwayat (misalnya bahwa pertanyaan boleh dilewati atau peserta boleh berhenti kapan saja, perkenalan diri, pemberitahuan penyimpanan data, atau penjelasan bahwa Mas Lini hanya membantu seputar Creative Talk) jangan disampaikan lagi walaupun ada di draf, kecuali peserta menanyakannya. Aturan ini tidak berlaku untuk link, nomor telepon, dan ajakan menghubungi Bang Herri yang ada di draf: semuanya wajib selalu disampaikan. Hindari juga pembuka dan frasa yang sama dengan balasan sebelumnya.
+- Mas Lini hanya melayani seputar Creative Talk, framework-nya, dan kesan peserta. Jika peserta bertanya atau meminta hal di luar itu (misalnya pengetahuan umum, tips bisnis, coding, keuangan, atau topik lain), JANGAN menjawab isinya sama sekali, sekecil apa pun. Sampaikan singkat dan sopan bahwa Mas Lini hanya bisa membantu seputar Creative Talk, cukup sekali; bila penjelasan itu sudah ada di riwayat, abaikan saja bagian di luar topik tanpa menanggapinya. Lalu lanjutkan maksud draf.
 - Jawaban peserta atas pertanyaan Mas Lini BUKAN pertanyaan di luar konteks, walaupun menyebut topik lain (misalnya harapan topik lanjutan seperti AI coding atau marketing). Bila jawaban_tercatat terisi, pesan peserta adalah jawaban: akui dan ucapkan terima kasih, jangan ditolak. Tolak hanya bila peserta meminta dijelaskan, diajari, atau dibantu hal di luar Creative Talk.
 - Jangan menyebut atau menebak waktu, tanggal, atau tempat acara (misalnya "kemarin").
 - Saat meminta maaf, sampaikan dengan tegas tanpa pengandaian seperti "kalau" atau "jika".
-- Salin setiap link dan nomor telepon dari draf persis sama. Jangan menambahkan link atau nomor lain.
+- Setiap link dan nomor telepon di draf WAJIB ada di balasan, disalin persis sama. Jangan menambahkan link atau nomor lain.
 - Panggil peserta "Kak", atau "Kak <nama>" bila nama sudah diketahui. Hindari kata "kamu".
 - Jangan memperkenalkan diri lagi bila riwayat menunjukkan sudah berkenalan. Variasikan susunan kalimat agar tidak terdengar seperti template.
 - Gaya chat WhatsApp: singkat, satu sampai tiga paragraf pendek, tanpa markdown, judul, atau daftar berpoin. Emoji paling banyak satu, hanya bila cocok dengan suasana; jangan memakai emoji saat peserta mengeluh.
@@ -39,17 +39,29 @@ function literals(text: string): string[] {
   return [...urls, ...numbers];
 }
 
+// Waktu acara tidak diketahui; model kadang tetap menebak "kemarin" meski dilarang prompt.
+function clean(candidate: string | null | undefined): string {
+  return (candidate ?? "").replace(/\s+kemarin\b/gi, "").trim();
+}
+
+function rejection(draft: string, text: string): string | null {
+  if (!text) return "empty";
+  if (text.length > 1500) return "too long";
+  const required = literals(draft);
+  if (required.some((item) => !text.includes(item)))
+    return "missing link/number";
+  const allowed = new Set(required);
+  if (literals(text).some((item) => !allowed.has(item)))
+    return "unexpected link/number";
+  return null;
+}
+
 export function acceptReply(
   draft: string,
   candidate: string | null | undefined,
 ): string {
-  const text = candidate?.trim();
-  if (!text || text.length > 1500) return draft;
-  const required = literals(draft);
-  if (required.some((item) => !text.includes(item))) return draft;
-  const allowed = new Set(required);
-  if (literals(text).some((item) => !allowed.has(item))) return draft;
-  return text;
+  const text = clean(candidate);
+  return rejection(draft, text) ? draft : text;
 }
 
 async function writeWithClaude(input: ComposeInput): Promise<string | null> {
@@ -91,11 +103,11 @@ export async function composeReply(
   write: (input: ComposeInput) => Promise<string | null> = writeWithClaude,
 ): Promise<string> {
   try {
-    const candidate = await write(input);
-    const reply = acceptReply(input.draft, candidate);
-    if (candidate && reply === input.draft)
-      console.warn("[mas-lini] composed reply rejected; using draft");
-    return reply;
+    const text = clean(await write(input));
+    const reason = rejection(input.draft, text);
+    if (!reason) return text;
+    console.warn(`[mas-lini] composed reply rejected (${reason}); using draft`);
+    return input.draft;
   } catch (err) {
     console.error("[mas-lini] compose failed; using draft:", err);
     return input.draft;

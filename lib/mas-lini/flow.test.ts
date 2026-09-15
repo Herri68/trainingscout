@@ -102,7 +102,7 @@ describe("Mas Lini", () => {
     expect(more.contact.complaints).toHaveLength(2);
     const neutral = advance(more.contact, {}, "oke");
     expect(neutral.reply).not.toContain("catat");
-    expect(neutral.reply).toContain("08112268556");
+    expect(neutral.reply).not.toContain("08112268556");
     expect(neutral.contact.complaints).toHaveLength(2);
   });
   it("antrean notifikasi: identitas, review selesai sekali, dan keluhan", () => {
@@ -166,6 +166,55 @@ describe("Mas Lini", () => {
     }
     expect(hints).toEqual([true, false, false]);
     expect(advance(result.contact, {}).reply).not.toContain("boleh melewati");
+  });
+  it("pesan di luar materi dijelaskan sekali lalu tidak dibalas", () => {
+    let result = advance(initialContact("628123456789@c.us"), {
+      name: "Rinto",
+      business: "Bengkel",
+    });
+    const first = advance(result.contact, { off_topic: true });
+    expect(first.reply).toContain("hanya dapat membantu seputar Creative Talk");
+    expect(first.contact.off_topic_noted).toBe(true);
+    const second = advance(first.contact, { off_topic: true });
+    expect(second.reply).toBe("");
+    result = advance(second.contact, { feedback: "Seru" });
+    expect(result.reply).toContain("Bagian mana");
+  });
+  it("kontak baru yang langsung di luar materi tetap disapa, keluhan tetap ditanggapi", () => {
+    expect(
+      advance(initialContact("628123456789@c.us"), { off_topic: true }).reply,
+    ).toContain("Boleh tahu nama Kakak");
+    const base = {
+      ...advance(initialContact("628123456789@c.us"), {
+        name: "Rinto",
+        business: "Bengkel",
+      }).contact,
+      off_topic_noted: true,
+    };
+    expect(
+      advance(base, { off_topic: true, negative: true }, "Jelek").reply,
+    ).toContain("mohon maaf");
+  });
+  it("penutup dengan kontak Bang Herri hanya disampaikan sekali", () => {
+    let result = advance(initialContact("628123456789@c.us"), {
+      name: "Ayu",
+      business: "Kue",
+    });
+    for (const feedback of ["Bagus", "Contohnya", "Sudah jelas", "Praktik AI"])
+      result = advance(result.contact, { feedback });
+    expect(result.reply).toContain("08112268556");
+    const after = advance(result.contact, {}, "makasih");
+    expect(after.reply).not.toContain("08112268556");
+    expect(after.reply).not.toBe("");
+    const legacy = advance(
+      {
+        ...result.contact,
+        closing_sent: undefined,
+        history: [{ role: "assistant", text: "hubungi 08112268556" }],
+      },
+      {},
+    );
+    expect(legacy.reply).not.toContain("08112268556");
   });
   it("menolak output model rusak dan tidak menerima status dari model", () => {
     expect(() => parseUnderstanding('{"negative":"false"}')).toThrow();

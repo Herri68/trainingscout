@@ -52,6 +52,16 @@ describe("tulis ulang balasan Mas Lini", () => {
     expect(acceptReply(draft, `${FRAMEWORK} ${"a".repeat(1600)}`)).toBe(draft);
   });
 
+  it("menghapus tebakan waktu acara seperti kemarin", () => {
+    expect(
+      acceptReply(
+        draft,
+        `Ini link-nya ya Kak: ${FRAMEWORK} Bagaimana kesan Kakak setelah Creative Talk kemarin?`,
+      ),
+    ).toBe(
+      `Ini link-nya ya Kak: ${FRAMEWORK} Bagaimana kesan Kakak setelah Creative Talk?`,
+    );
+  });
   it("kegagalan AI tidak menggagalkan balasan", async () => {
     const reply = await composeReply(
       input,

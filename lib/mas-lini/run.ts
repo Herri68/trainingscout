@@ -53,17 +53,21 @@ export async function runMasLini(
       const understanding = await understand(contact, text);
       const result = advance(contact, understanding, text);
       // Alur tetap dari flow.ts; kalimatnya ditulis ulang agar luwes seperti CS manusia.
-      result.reply = await composeReply({
-        contact: result.contact,
-        message: text,
-        draft: result.reply,
-        history: contact.history ?? [],
-        recordedAnswer: understanding.feedback,
-      });
+      // Balasan kosong = pesan di luar materi yang tidak dibalas.
+      if (result.reply)
+        result.reply = await composeReply({
+          contact: result.contact,
+          message: text,
+          draft: result.reply,
+          history: contact.history ?? [],
+          recordedAnswer: understanding.feedback,
+        });
       result.contact.history = [
         ...(contact.history ?? []),
         { role: "user" as const, text: text.slice(0, 1000) },
-        { role: "assistant" as const, text: result.reply },
+        ...(result.reply
+          ? [{ role: "assistant" as const, text: result.reply }]
+          : []),
       ].slice(-12);
       const saved = await db.rpc("cs_prepare", {
         p_jid: jid,
@@ -77,7 +81,7 @@ export async function runMasLini(
       state = result.contact;
     }
     // One bubble: do not swallow send failures or truncate the framework URL.
-    await sendText(jid, reply);
+    if (reply) await sendText(jid, reply);
     const delivered = await db
       .from("cs_replies")
       .update({ delivered: true })
