@@ -51,7 +51,7 @@ export function acceptReply(
 async function writeWithClaude(input: ComposeInput): Promise<string | null> {
   const client = new Anthropic({ timeout: 25000, maxRetries: 0 });
   const response = await client.beta.messages.create({
-    model: "claude-opus-5",
+    model: "claude-sonnet-5",
     max_tokens: 16000,
     betas: ["server-side-fallback-2026-07-01"],
     fallbacks: "default",
