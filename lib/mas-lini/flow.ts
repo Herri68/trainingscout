@@ -2,8 +2,8 @@ import { normalizePhoneToJid } from "@/lib/wa/phone";
 
 export const FRAMEWORK =
   "https://drive.google.com/drive/folders/1kT-1D_MYwIgcYF4ve7LYb4-SbVNwZP7y?usp=sharing";
-export const HANDOFF =
-  "Silakan hubungi Bang Herri langsung di 08112268556: https://wa.me/628112268556";
+// Tanpa link wa.me: WhatsApp menampilkannya sebagai kartu "Share on WhatsApp".
+export const HANDOFF_CONTACT = "Bang Herri melalui WhatsApp di 08112268556";
 export const QUESTIONS = [
   "Bagaimana kesan Kakak setelah mengikuti Creative Talk?",
   "Bagian mana yang paling menarik atau bermanfaat buat Kakak?",
@@ -20,6 +20,7 @@ export type Contact = {
   feedback: (string | null)[];
   feedback_stopped: boolean;
   handed_off: boolean;
+  complaints?: string[];
 };
 export type Understanding = {
   name?: string;
@@ -47,6 +48,7 @@ export function initialContact(jid: string): Contact {
 export function advance(
   previous: Contact,
   input: Understanding,
+  message = "",
 ): { contact: Contact; reply: string } {
   const contact = { ...previous, feedback: [...previous.feedback] };
   if (input.name) contact.name = input.name;
@@ -63,9 +65,23 @@ export function advance(
     : "";
   let reply: string;
   if (input.negative || contact.handed_off) {
+    const firstEscalation = !contact.handed_off;
     contact.handed_off = true;
     contact.feedback_stopped = true;
-    reply = `Terima kasih sudah menyampaikan${name}. Maaf kalau pengalamannya kurang berkenan. ${HANDOFF}`;
+    // Keluhan dicatat agar pernyataan "sudah kami catat" benar adanya.
+    const note = (input.feedback ?? message).trim().slice(0, 1000);
+    if (input.negative && note)
+      contact.complaints = [...(contact.complaints ?? []), note].slice(-20);
+    const link = input.request_framework
+      ? `Berikut link framework Creative Talk${name}: ${FRAMEWORK}\n\n`
+      : "";
+    reply =
+      link +
+      (firstEscalation
+        ? `Terima kasih atas masukannya${name}. Kami mohon maaf karena pengalaman Kakak di Creative Talk belum sesuai harapan.\n\nMasukan Kakak sudah kami catat sebagai bahan evaluasi. Untuk pembahasan lebih lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
+        : input.negative
+          ? `Terima kasih${name}, tambahan masukan Kakak sudah kami catat. Untuk tindak lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
+          : `Terima kasih${name}. Untuk tindak lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`);
   } else if (!contact.name) {
     reply = "Boleh tahu nama Kakak?";
   } else if (!contact.business) {
@@ -92,7 +108,7 @@ export function advance(
     reply =
       link +
       (contact.feedback_stopped || next < 0
-        ? `Terima kasih${name}! Semoga framework-nya bermanfaat. Kalau butuh bantuan lanjutan, ${HANDOFF}`
+        ? `Terima kasih${name}! Semoga framework-nya bermanfaat. Jika membutuhkan bantuan lebih lanjut, Kakak dapat menghubungi ${HANDOFF_CONTACT}.`
         : `${input.feedback ? `Terima kasih${name}. ` : ""}${QUESTIONS[next]} Kakak boleh melewati pertanyaan atau berhenti kapan saja.`);
   }
   return { contact, reply: intro + reply };

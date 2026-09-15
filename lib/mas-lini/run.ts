@@ -44,7 +44,7 @@ export async function runMasLini(
       // Privacy ID (@lid) is not a phone number; resolve it before asking the user.
       if (!contact.phone && jid.endsWith("@lid"))
         contact.phone = await lookupPhoneByLid(jid);
-      const result = advance(contact, await understand(contact, text));
+      const result = advance(contact, await understand(contact, text), text);
       const saved = await db.rpc("cs_prepare", {
         p_jid: jid,
         p_lease: lease,

@@ -80,6 +80,31 @@ describe("Mas Lini", () => {
       advance(first.contact, { feedback: "jawaban" }).contact.feedback,
     ).toEqual([null, null, null, null]);
   });
+  it("eskalasi profesional: minta maaf, catat keluhan, tanpa kartu wa.me, tidak mengulang", () => {
+    const base = advance(initialContact("628123456789@c.us"), {
+      name: "Ridwan",
+      business: "Resto",
+    }).contact;
+    const first = advance(base, { negative: true }, "Jelek banget materinya");
+    expect(first.reply).toContain("Kak Ridwan");
+    expect(first.reply).toContain("mohon maaf");
+    expect(first.reply).toContain("sudah kami catat");
+    expect(first.reply).toContain("08112268556");
+    expect(first.reply).not.toContain("wa.me");
+    expect(first.contact.complaints).toEqual(["Jelek banget materinya"]);
+    const more = advance(
+      first.contact,
+      { negative: true },
+      "Pembicaranya telat",
+    );
+    expect(more.reply).not.toContain("mohon maaf");
+    expect(more.reply).toContain("tambahan masukan");
+    expect(more.contact.complaints).toHaveLength(2);
+    const neutral = advance(more.contact, {}, "oke");
+    expect(neutral.reply).not.toContain("catat");
+    expect(neutral.reply).toContain("08112268556");
+    expect(neutral.contact.complaints).toHaveLength(2);
+  });
   it("menolak output model rusak dan tidak menerima status dari model", () => {
     expect(() => parseUnderstanding('{"negative":"false"}')).toThrow();
     expect(() => parseUnderstanding("[]")).toThrow();
